@@ -91,8 +91,8 @@ def _(mo):
       .paragraph h4 { font-weight: 600; font-size: 1em; color: #94a3b8; margin-top: 1.2em; }
       .paragraph :not(pre) > code {
         font-family: var(--marimo-monospace-font);
-        background: #1a2035; border: 1px solid #2d3f5e;
-        border-radius: 4px; padding: 1px 6px; font-size: 0.88em; color: #a5b4fc;
+        background: #1a2035 !important; border: 1px solid #2d3f5e;
+        border-radius: 4px; padding: 1px 6px; font-size: 0.88em; color: #a5b4fc !important;
       }
       .paragraph pre {
         background: #0d1220; border: 1px solid #1e2d47;
@@ -107,18 +107,21 @@ def _(mo):
         border-collapse: collapse; margin: 1.2em 0; font-size: 0.92em;
         border: 1px solid #1e2d47; border-radius: 6px; overflow: hidden;
       }
-      .paragraph thead { background: #0d1220; }
+      .paragraph tr { background: transparent !important; }
+      .paragraph thead, .paragraph thead tr { background: #0d1220 !important; }
       .paragraph th {
         font-weight: 600; text-align: left; padding: 9px 16px;
         border-bottom: 2px solid #1e2d47; color: #a5b4fc;
         font-size: 0.88em; text-transform: uppercase; letter-spacing: 0.04em;
+        background: #0d1220 !important;
       }
       .paragraph td {
         padding: 8px 16px; border-bottom: 1px solid #141d2e;
         vertical-align: top; color: #cbd5e1;
+        background: #07080f !important;
       }
       .paragraph tbody tr:last-child td { border-bottom: none; }
-      .paragraph tbody tr:hover td { background: #0d1428; }
+      .paragraph tbody tr:hover td { background: #0d1428 !important; }
       .paragraph blockquote {
         border-left: 3px solid #6d28d9; background: #0d1220;
         padding: 0.7em 1.2em; margin: 1.3em 0; color: #94a3b8;
