@@ -1,0 +1,203 @@
+/*
+  Attention Sinks — dark "cosmic void" theme.
+  Uses the documented marimo theming API:
+    - theme = "dark" in script metadata activates marimo's dark mode
+    - --marimo-{text,heading,monospace}-font are the stable font variables
+    - .paragraph is the documented class for mo.md() prose content
+    - light-dark() values honour the active color-scheme
+  Ref: https://docs.marimo.io/guides/configuration/theming
+*/
+
+/* ── Fonts ──────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --marimo-text-font:       'Inter', system-ui, sans-serif;
+  --marimo-heading-font:    'Space Grotesk', sans-serif;
+  --marimo-monospace-font:  'JetBrains Mono', 'Fira Mono', monospace;
+}
+
+/* ── Background override (on top of theme = "dark") ─────────────────────── */
+/*
+  theme="dark" sets marimo's background to #181c1a.
+  We deepen it to our space-black #07080f.
+*/
+[data-cell-role='output'] {
+  background-color: #07080f;
+}
+
+/* ── Prose content (.paragraph = documented class for mo.md() output) ───── */
+.paragraph {
+  max-width: 64rem;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 16px;
+  line-height: 1.72;
+  color: #cbd5e1;
+  background-color: #07080f;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings */
+.paragraph h1 {
+  font-family: var(--marimo-heading-font);
+  font-weight: 700;
+  font-size: 2.2em;
+  letter-spacing: -0.03em;
+  color: #f8fafc;
+  margin-top: 0.3em;
+  margin-bottom: 0.4em;
+  border-bottom: 2px solid #1e2d47;
+  padding-bottom: 0.3em;
+}
+.paragraph h2 {
+  font-family: var(--marimo-heading-font);
+  font-weight: 600;
+  font-size: 1.5em;
+  letter-spacing: -0.02em;
+  color: #f1f5f9;
+  margin-top: 2.2em;
+  margin-bottom: 0.4em;
+  border-bottom: 1px solid #1e2d47;
+  padding-bottom: 0.2em;
+}
+.paragraph h3 {
+  font-family: var(--marimo-heading-font);
+  font-weight: 600;
+  font-size: 1.15em;
+  color: #a5b4fc;
+  margin-top: 1.8em;
+  margin-bottom: 0.3em;
+}
+.paragraph h4 {
+  font-weight: 600;
+  font-size: 1em;
+  color: #94a3b8;
+  margin-top: 1.2em;
+}
+
+/* Inline code */
+.paragraph :not(pre) > code {
+  font-family: var(--marimo-monospace-font);
+  background: #1a2035;
+  border: 1px solid #2d3f5e;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.88em;
+  color: #a5b4fc;
+}
+
+/* Code blocks */
+.paragraph pre {
+  background: #0d1220;
+  border: 1px solid #1e2d47;
+  border-left: 3px solid #6d28d9;
+  border-radius: 6px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  line-height: 1.55;
+}
+.paragraph pre code {
+  font-family: var(--marimo-monospace-font);
+  font-size: 0.88em;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #e2e8f0;
+}
+
+/* Tables */
+.paragraph table {
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  font-size: 0.92em;
+  border: 1px solid #1e2d47;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.paragraph thead  { background: #0d1220; }
+.paragraph th {
+  font-weight: 600;
+  text-align: left;
+  padding: 9px 16px;
+  border-bottom: 2px solid #1e2d47;
+  color: #a5b4fc;
+  font-size: 0.88em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.paragraph td {
+  padding: 8px 16px;
+  border-bottom: 1px solid #141d2e;
+  vertical-align: top;
+  color: #cbd5e1;
+}
+.paragraph tbody tr:last-child td { border-bottom: none; }
+.paragraph tbody tr:hover td { background: #0d1428; }
+
+/* Blockquotes */
+.paragraph blockquote {
+  border-left: 3px solid #6d28d9;
+  background: #0d1220;
+  padding: 0.7em 1.2em;
+  margin: 1.3em 0;
+  color: #94a3b8;
+  border-radius: 0 6px 6px 0;
+}
+.paragraph blockquote p:last-child { margin-bottom: 0; }
+
+/* Text */
+.paragraph strong { color: #f1f5f9; font-weight: 650; }
+.paragraph em     { color: #a5b4fc; }
+.paragraph a      { color: #818cf8; border-bottom: 1px solid #3730a3; }
+.paragraph a:hover { border-bottom-color: #818cf8; }
+.paragraph hr     { border: none; border-top: 1px solid #1e2d47; margin: 1.8em 0; }
+.paragraph ul, .paragraph ol { padding-left: 1.6em; margin: 0.6em 0; }
+.paragraph li { margin: 0.35em 0; }
+
+/* KaTeX math */
+.paragraph .katex-display {
+  margin: 0.8em 0;
+  padding: 0.5em;
+  background: #0d1220;
+  border-radius: 6px;
+}
+
+/* ── Stat cards (used in mo.Html() output cells) ────────────────────────── */
+.as-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 1.2em 0;
+  max-width: 64rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+.as-card {
+  background: #0d1220;
+  border: 1px solid #1e2d47;
+  border-radius: 8px;
+  padding: 16px 20px;
+  text-align: center;
+}
+.as-val {
+  font-family: var(--marimo-heading-font);
+  font-size: 2em;
+  font-weight: 700;
+  color: #f59e0b;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.as-lbl {
+  font-size: 0.75em;
+  color: #8896a8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+.as-sub {
+  font-size: 0.68em;
+  color: #94a3b8;
+  margin-top: 4px;
+}
