@@ -39,104 +39,109 @@ def _(mo):
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-      /* ── Fonts ───────────────────────────────────────────────────── */
+      /* ── Fonts: only documented marimo CSS variables ─────────────── */
       :root {
         --marimo-text-font:      'Inter', system-ui, sans-serif;
         --marimo-heading-font:   'Space Grotesk', sans-serif;
         --marimo-monospace-font: 'JetBrains Mono', 'Fira Mono', monospace;
-        color-scheme: dark;
       }
 
-      /* ── Global dark indigo background ──────────────────────────── */
-      body, html { background-color: #07080f !important; }
-      [data-cell-role='output'] { background-color: #07080f; }
-      /* ponytail: no wildcard * here — marimo dark-theme handles widget internals */
-
-      /* ── Center all output content (charts, heatmaps, widgets) ──── */
+      /* ── Background (documented selector) ───────────────────────── */
+      body, html { background-color: #07080f; }
       [data-cell-role='output'] {
+        background-color: #07080f;
         display: flex;
         flex-direction: column;
         align-items: center;
       }
 
-      /* ── Prose cells (.paragraph = documented marimo class) ──────── */
-      .paragraph {
-        width: 100%;
-        max-width: 64rem;
-        margin-left: auto;
-        margin-right: auto;
-        font-size: 16px;
-        line-height: 1.72;
-        color: #cbd5e1;
-        background-color: #07080f;
+      /*
+        Prose rules use [data-cell-role='output'] .paragraph to reach
+        specificity (0,2,0), which outranks marimo's own .paragraph (0,1,0)
+        rules even when both sides use !important.
+        [data-cell-role='output'] is a documented stable selector per
+        https://docs.marimo.io/guides/configuration/theming
+      */
+      [data-cell-role='output'] .paragraph {
+        width: 100%; max-width: 64rem;
+        margin-left: auto; margin-right: auto;
+        font-size: 16px; line-height: 1.72;
+        color: #cbd5e1 !important;
+        background-color: #07080f !important;
         -webkit-font-smoothing: antialiased;
       }
-      .paragraph h1 {
+      [data-cell-role='output'] .paragraph h1 {
         font-family: var(--marimo-heading-font);
         font-weight: 700; font-size: 2.2em; letter-spacing: -0.03em;
-        color: #f8fafc; margin-top: 0.3em; margin-bottom: 0.4em;
+        color: #f8fafc !important; margin-top: 0.3em; margin-bottom: 0.4em;
         border-bottom: 2px solid #1e2d47; padding-bottom: 0.3em;
       }
-      .paragraph h2 {
+      [data-cell-role='output'] .paragraph h2 {
         font-family: var(--marimo-heading-font);
         font-weight: 600; font-size: 1.5em; letter-spacing: -0.02em;
-        color: #f1f5f9; margin-top: 2.2em; margin-bottom: 0.4em;
+        color: #f1f5f9 !important; margin-top: 2.2em; margin-bottom: 0.4em;
         border-bottom: 1px solid #1e2d47; padding-bottom: 0.2em;
       }
-      .paragraph h3 {
+      [data-cell-role='output'] .paragraph h3 {
         font-family: var(--marimo-heading-font);
-        font-weight: 600; font-size: 1.15em; color: #a5b4fc;
+        font-weight: 600; font-size: 1.15em; color: #a5b4fc !important;
         margin-top: 1.8em; margin-bottom: 0.3em;
       }
-      .paragraph h4 { font-weight: 600; font-size: 1em; color: #94a3b8; margin-top: 1.2em; }
-      .paragraph :not(pre) > code {
-        font-family: var(--marimo-monospace-font);
-        background: #1a2035 !important; border: 1px solid #2d3f5e;
-        border-radius: 4px; padding: 1px 6px; font-size: 0.88em; color: #a5b4fc !important;
+      [data-cell-role='output'] .paragraph h4 {
+        font-weight: 600; font-size: 1em; color: #94a3b8 !important; margin-top: 1.2em;
       }
-      .paragraph pre {
-        background: #0d1220; border: 1px solid #1e2d47;
-        border-left: 3px solid #6d28d9;
+      [data-cell-role='output'] .paragraph :not(pre) > code {
+        font-family: var(--marimo-monospace-font);
+        background: #1a2035 !important; border: 1px solid #2d3f5e !important;
+        border-radius: 4px; padding: 1px 6px; font-size: 0.88em;
+        color: #a5b4fc !important;
+      }
+      [data-cell-role='output'] .paragraph pre {
+        background: #0d1220 !important; border: 1px solid #1e2d47 !important;
+        border-left: 3px solid #6d28d9 !important;
         border-radius: 6px; padding: 12px 16px; overflow-x: auto;
       }
-      .paragraph pre code {
+      [data-cell-role='output'] .paragraph pre code {
         font-family: var(--marimo-monospace-font); font-size: 0.88em;
-        background: transparent; border: none; padding: 0; color: #e2e8f0;
+        background: transparent !important; border: none !important;
+        padding: 0; color: #e2e8f0 !important;
       }
-      .paragraph table {
+      [data-cell-role='output'] .paragraph table {
         border-collapse: collapse; margin: 1.2em 0; font-size: 0.92em;
         border: 1px solid #1e2d47; border-radius: 6px; overflow: hidden;
       }
-      .paragraph tr { background: transparent !important; }
-      .paragraph thead, .paragraph thead tr { background: #0d1220 !important; }
-      .paragraph th {
+      [data-cell-role='output'] .paragraph tr { background: transparent !important; }
+      [data-cell-role='output'] .paragraph thead,
+      [data-cell-role='output'] .paragraph thead tr { background: #0d1220 !important; }
+      [data-cell-role='output'] .paragraph th {
         font-weight: 600; text-align: left; padding: 9px 16px;
-        border-bottom: 2px solid #1e2d47; color: #a5b4fc;
+        border-bottom: 2px solid #1e2d47; color: #a5b4fc !important;
         font-size: 0.88em; text-transform: uppercase; letter-spacing: 0.04em;
         background: #0d1220 !important;
       }
-      .paragraph td {
+      [data-cell-role='output'] .paragraph td {
         padding: 8px 16px; border-bottom: 1px solid #141d2e;
-        vertical-align: top; color: #cbd5e1;
+        vertical-align: top; color: #cbd5e1 !important;
         background: #07080f !important;
       }
-      .paragraph tbody tr:last-child td { border-bottom: none; }
-      .paragraph tbody tr:hover td { background: #0d1428 !important; }
-      .paragraph blockquote {
-        border-left: 3px solid #6d28d9; background: #0d1220;
-        padding: 0.7em 1.2em; margin: 1.3em 0; color: #94a3b8;
+      [data-cell-role='output'] .paragraph tbody tr:last-child td { border-bottom: none; }
+      [data-cell-role='output'] .paragraph tbody tr:hover td { background: #0d1428 !important; }
+      [data-cell-role='output'] .paragraph blockquote {
+        border-left: 3px solid #6d28d9; background: #0d1220 !important;
+        padding: 0.7em 1.2em; margin: 1.3em 0; color: #94a3b8 !important;
         border-radius: 0 6px 6px 0;
       }
-      .paragraph blockquote p:last-child { margin-bottom: 0; }
-      .paragraph strong { color: #f1f5f9; font-weight: 650; }
-      .paragraph em     { color: #a5b4fc; }
-      .paragraph a      { color: #818cf8; border-bottom: 1px solid #3730a3; text-decoration: none; }
-      .paragraph a:hover { border-bottom-color: #818cf8; }
-      .paragraph hr     { border: none; border-top: 1px solid #1e2d47; margin: 1.8em 0; }
-      .paragraph ul, .paragraph ol { padding-left: 1.6em; margin: 0.6em 0; }
-      .paragraph li { margin: 0.35em 0; }
-      .paragraph .katex-display {
-        margin: 0.8em 0; padding: 0.5em; background: #0d1220; border-radius: 6px;
+      [data-cell-role='output'] .paragraph blockquote p:last-child { margin-bottom: 0; }
+      [data-cell-role='output'] .paragraph strong { color: #f1f5f9 !important; font-weight: 650; }
+      [data-cell-role='output'] .paragraph em     { color: #a5b4fc !important; }
+      [data-cell-role='output'] .paragraph a      { color: #818cf8 !important; border-bottom: 1px solid #3730a3; text-decoration: none; }
+      [data-cell-role='output'] .paragraph a:hover { border-bottom-color: #818cf8; }
+      [data-cell-role='output'] .paragraph hr     { border: none; border-top: 1px solid #1e2d47; margin: 1.8em 0; }
+      [data-cell-role='output'] .paragraph ul,
+      [data-cell-role='output'] .paragraph ol { padding-left: 1.6em; margin: 0.6em 0; }
+      [data-cell-role='output'] .paragraph li { margin: 0.35em 0; color: #cbd5e1 !important; }
+      [data-cell-role='output'] .paragraph .katex-display {
+        margin: 0.8em 0; padding: 0.5em; background: #0d1220 !important; border-radius: 6px;
       }
 
       /* ── Stat cards ──────────────────────────────────────────────── */
@@ -147,7 +152,7 @@ def _(mo):
         max-width: 64rem; margin-left: auto; margin-right: auto;
       }
       .as-card {
-        background: #0d1220; border: 1px solid #1e2d47;
+        background: #0d1220 !important; border: 1px solid #1e2d47;
         border-radius: 8px; padding: 16px 20px; text-align: center;
       }
       .as-val {
