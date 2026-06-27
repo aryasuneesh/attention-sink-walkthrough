@@ -48,6 +48,9 @@ def _(mo):
       [data-cell-role='output'] {
         background-color: #07080f;
         display: flex; flex-direction: column; align-items: center;
+        width: 100%; max-width: 72rem;
+        margin-left: auto !important; margin-right: auto !important;
+        padding: 0 1.5rem; box-sizing: border-box;
       }
 
       /* ── Headings: no .paragraph dependency so they win regardless ── */
@@ -404,7 +407,7 @@ def _(N_HEADS, N_LAYERS, alt, eps_slider, mo, pl, sink_scores_live):
             <div style="{_lbl}">LLaMA 3.1 405B</div><div style="{_sub}">paper Table 1 · ε=0.3</div></div>
         </div>"""),
         _hmap,
-    ])
+    ], align='center')
     return
 
 
@@ -426,7 +429,7 @@ def _(mo):
 
 
 @app.cell
-def _(N_HEADS, N_LAYERS, anywidget, sink_scores_live, tokens_live, traitlets):
+def _(N_HEADS, N_LAYERS, anywidget, mo, sink_scores_live, tokens_live, traitlets):
     class SinkMapWidget(anywidget.AnyWidget):
         _esm = r"""
         function render({ model, el }) {
@@ -524,7 +527,7 @@ def _(N_HEADS, N_LAYERS, anywidget, sink_scores_live, tokens_live, traitlets):
         n_layers=N_LAYERS,
         n_heads=N_HEADS,
     )
-    sink_widget
+    mo.hstack([sink_widget], justify='center')
     return SinkMapWidget, sink_widget
 
 
@@ -577,7 +580,7 @@ def _(attn_live, alt, mo, pl, sink_widget, tokens_live):
         _out = mo.vstack([
             mo.Html(f'<p style="font-family:Space Grotesk;font-size:13px;color:{_color};margin:4px 0 8px;max-width:640px;margin-left:auto;margin-right:auto">▶ Layer {_sl}, Head {_sh} — {_label} (sink={_sink_sc:.3f})</p>'),
             _chart,
-        ])
+        ], align='center')
     _out
     return
 
@@ -639,7 +642,7 @@ def _(alt, mo, pl):
                 scale=alt.Scale(domain=["With BOS", "No BOS"], range=["#f59e0b", "#6d28d9"]),
                 legend=None),
             column=alt.Column("Task:N",
-                header=alt.Header(labelColor="#94a3b8", titleColor="#475569", labelFontSize=11)),
+                header=alt.Header(labelColor="#94a3b8", titleColor="#94a3b8", labelFontSize=11)),
             tooltip=[alt.Tooltip("Task:N"), alt.Tooltip("Condition:N"), alt.Tooltip("Score:Q", format=".2f")],
         )
         .properties(width=170, height=240)
@@ -664,7 +667,7 @@ def _(alt, mo, pl):
         </div>"""),
         _chart,
         mo.md("The RULER result is not a regression — it is **total functional failure**. Without BOS, attention has nowhere safe to discard surplus probability mass. Distributions become unstable and representational collapse follows (Proposition 3.1 in the paper). The sink is load-bearing: you cannot train it away without replacing it with something else."),
-    ])
+    ], align='center')
     return
 
 
