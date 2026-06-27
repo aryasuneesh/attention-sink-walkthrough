@@ -38,124 +38,107 @@ def _(mo):
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script>
-    (function() {
-      if (document.getElementById('as-theme')) return;
-      var s = document.createElement('style');
-      s.id = 'as-theme';
-      s.textContent = `
-        /* documented font variables */
-        :root {
-          --marimo-text-font:      'Inter', system-ui, sans-serif;
-          --marimo-heading-font:   'Space Grotesk', sans-serif;
-          --marimo-monospace-font: 'JetBrains Mono', 'Fira Mono', monospace;
-        }
-        body, html { background-color: #07080f; }
-        [data-cell-role='output'] {
-          background-color: #07080f;
-          display: flex; flex-direction: column; align-items: center;
-        }
-        /* headings — broad selectors, no .paragraph dependency */
-        [data-cell-role='output'] h1 {
-          font-family: var(--marimo-heading-font) !important;
-          font-weight: 700 !important; font-size: 2.2em !important;
-          letter-spacing: -0.03em !important; color: #f8fafc !important;
-          margin-top: 0.3em !important; margin-bottom: 0.4em !important;
-          border-bottom: 2px solid #1e2d47 !important; padding-bottom: 0.3em !important;
-        }
-        [data-cell-role='output'] h2 {
-          font-family: var(--marimo-heading-font) !important;
-          font-weight: 600 !important; font-size: 1.5em !important;
-          letter-spacing: -0.02em !important; color: #f1f5f9 !important;
-          margin-top: 2.2em !important; margin-bottom: 0.4em !important;
-          border-bottom: 1px solid #1e2d47 !important; padding-bottom: 0.2em !important;
-        }
-        [data-cell-role='output'] h3 {
-          font-family: var(--marimo-heading-font) !important;
-          font-weight: 600 !important; font-size: 1.15em !important;
-          color: #a5b4fc !important;
-          margin-top: 1.8em !important; margin-bottom: 0.3em !important;
-        }
-        [data-cell-role='output'] h4 {
-          font-weight: 600 !important; font-size: 1em !important;
-          color: #e2e8f0 !important; margin-top: 1.2em !important;
-        }
-        /* prose body */
-        [data-cell-role='output'] .paragraph {
-          width: 100%; max-width: 64rem;
-          margin-left: auto; margin-right: auto;
-          font-size: 16px; line-height: 1.72;
-          color: #cbd5e1 !important;
-          background-color: #07080f !important;
-          -webkit-font-smoothing: antialiased;
-        }
-        [data-cell-role='output'] p,
-        [data-cell-role='output'] .paragraph p { color: #cbd5e1 !important; }
-        [data-cell-role='output'] li,
-        [data-cell-role='output'] .paragraph li { color: #cbd5e1 !important; margin: 0.35em 0; }
-        [data-cell-role='output'] .paragraph strong { color: #f1f5f9 !important; font-weight: 650; }
-        [data-cell-role='output'] .paragraph em     { color: #a5b4fc !important; }
-        [data-cell-role='output'] .paragraph a      { color: #818cf8 !important; text-decoration: none; border-bottom: 1px solid #3730a3; }
-        [data-cell-role='output'] .paragraph a:hover { border-bottom-color: #818cf8; }
-        [data-cell-role='output'] .paragraph hr { border: none; border-top: 1px solid #1e2d47; margin: 1.8em 0; }
-        /* inline code */
-        [data-cell-role='output'] :not(pre) > code {
-          font-family: var(--marimo-monospace-font) !important;
-          background: #1a2035 !important; border: 1px solid #2d3f5e !important;
-          border-radius: 4px !important; padding: 1px 6px !important;
-          font-size: 0.88em !important; color: #a5b4fc !important;
-        }
-        /* code blocks */
-        [data-cell-role='output'] pre {
-          background: #0d1220 !important; border: 1px solid #1e2d47 !important;
-          border-left: 3px solid #6d28d9 !important;
-          border-radius: 6px !important; padding: 12px 16px !important; overflow-x: auto;
-        }
-        [data-cell-role='output'] pre code {
-          font-family: var(--marimo-monospace-font) !important; font-size: 0.88em !important;
-          background: transparent !important; border: none !important;
-          padding: 0 !important; color: #e2e8f0 !important;
-        }
-        /* tables */
-        [data-cell-role='output'] table {
-          border-collapse: collapse !important; font-size: 0.92em;
-          border: 1px solid #1e2d47; border-radius: 6px; overflow: hidden;
-        }
-        [data-cell-role='output'] tr   { background: transparent !important; }
-        [data-cell-role='output'] thead,
-        [data-cell-role='output'] thead tr { background: #0d1220 !important; }
-        [data-cell-role='output'] th {
-          color: #a5b4fc !important; background: #0d1220 !important;
-          font-weight: 600; text-align: left; padding: 9px 16px;
-          font-size: 0.88em; text-transform: uppercase; letter-spacing: 0.04em;
-          border-bottom: 2px solid #1e2d47;
-        }
-        [data-cell-role='output'] td {
-          color: #cbd5e1 !important; background: #07080f !important;
-          padding: 8px 16px; border-bottom: 1px solid #141d2e; vertical-align: top;
-        }
-        [data-cell-role='output'] tbody tr:hover td { background: #0d1428 !important; }
-        /* blockquote */
-        [data-cell-role='output'] blockquote {
-          border-left: 3px solid #6d28d9 !important; background: #0d1220 !important;
-          padding: 0.7em 1.2em !important; margin: 1.3em 0 !important;
-          color: #94a3b8 !important; border-radius: 0 6px 6px 0;
-        }
-        /* stat cards */
-        .as-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-          gap: 12px; margin: 1.2em 0;
-          max-width: 64rem; margin-left: auto; margin-right: auto;
-        }
-        .as-card { background: #0d1220 !important; border: 1px solid #1e2d47; border-radius: 8px; padding: 16px 20px; text-align: center; }
-        .as-val  { font-family: var(--marimo-heading-font); font-size: 2em; font-weight: 700; color: #f59e0b; line-height: 1; margin-bottom: 4px; }
-        .as-lbl  { font-size: 0.75em; color: #8896a8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
-        .as-sub  { font-size: 0.68em; color: #94a3b8; margin-top: 4px; }
-      `;
-      document.head.appendChild(s);
-    })();
-    </script>
+    <style>
+      :root {
+        --marimo-text-font:      'Inter', system-ui, sans-serif;
+        --marimo-heading-font:   'Space Grotesk', sans-serif;
+        --marimo-monospace-font: 'JetBrains Mono', 'Fira Mono', monospace;
+      }
+      body, html { background-color: #07080f; }
+      [data-cell-role='output'] {
+        background-color: #07080f;
+        display: flex; flex-direction: column; align-items: center;
+      }
+
+      /* ── Headings: no .paragraph dependency so they win regardless ── */
+      [data-cell-role='output'] h1 {
+        font-family: var(--marimo-heading-font) !important;
+        font-weight: 700 !important; font-size: 2.2em !important; letter-spacing: -0.03em !important;
+        color: #f8fafc !important;
+        margin-top: 0.3em !important; margin-bottom: 0.4em !important;
+        border-bottom: 2px solid #1e2d47 !important; padding-bottom: 0.3em !important;
+      }
+      [data-cell-role='output'] h2 {
+        font-family: var(--marimo-heading-font) !important;
+        font-weight: 600 !important; font-size: 1.5em !important; letter-spacing: -0.02em !important;
+        color: #f1f5f9 !important;
+        margin-top: 2.2em !important; margin-bottom: 0.4em !important;
+        border-bottom: 1px solid #1e2d47 !important; padding-bottom: 0.2em !important;
+      }
+      [data-cell-role='output'] h3 {
+        font-family: var(--marimo-heading-font) !important;
+        font-weight: 600 !important; font-size: 1.15em !important;
+        color: #a5b4fc !important;
+        margin-top: 1.8em !important; margin-bottom: 0.3em !important;
+      }
+      [data-cell-role='output'] h4 {
+        font-weight: 600 !important; font-size: 1em !important;
+        color: #e2e8f0 !important; margin-top: 1.2em !important;
+      }
+
+      /* ── Prose body ──────────────────────────────────────────────── */
+      [data-cell-role='output'] .paragraph {
+        width: 100%; max-width: 64rem;
+        margin-left: auto; margin-right: auto;
+        font-size: 16px; line-height: 1.72;
+        color: #cbd5e1 !important; background-color: #07080f !important;
+        -webkit-font-smoothing: antialiased;
+      }
+      [data-cell-role='output'] p   { color: #cbd5e1 !important; }
+      [data-cell-role='output'] li  { color: #cbd5e1 !important; margin: 0.35em 0; }
+      [data-cell-role='output'] .paragraph strong { color: #f1f5f9 !important; font-weight: 650; }
+      [data-cell-role='output'] .paragraph em     { color: #a5b4fc !important; }
+      [data-cell-role='output'] .paragraph a      { color: #818cf8 !important; text-decoration: none; border-bottom: 1px solid #3730a3; }
+      [data-cell-role='output'] .paragraph a:hover { border-bottom-color: #818cf8; }
+      [data-cell-role='output'] .paragraph hr { border: none; border-top: 1px solid #1e2d47; margin: 1.8em 0; }
+      [data-cell-role='output'] .paragraph ul,
+      [data-cell-role='output'] .paragraph ol { padding-left: 1.6em; margin: 0.6em 0; }
+
+      /* ── Inline code ─────────────────────────────────────────────── */
+      [data-cell-role='output'] :not(pre) > code {
+        font-family: var(--marimo-monospace-font) !important;
+        background: #1a2035 !important; border: 1px solid #2d3f5e !important;
+        border-radius: 4px !important; padding: 1px 6px !important;
+        font-size: 0.88em !important; color: #a5b4fc !important;
+      }
+
+      /* ── Code blocks ─────────────────────────────────────────────── */
+      [data-cell-role='output'] pre {
+        background: #0d1220 !important; border: 1px solid #1e2d47 !important;
+        border-left: 3px solid #6d28d9 !important;
+        border-radius: 6px !important; padding: 12px 16px !important; overflow-x: auto;
+      }
+      [data-cell-role='output'] pre code {
+        font-family: var(--marimo-monospace-font) !important; font-size: 0.88em !important;
+        background: transparent !important; border: none !important;
+        padding: 0 !important; color: #e2e8f0 !important;
+      }
+
+      /* ── Tables ──────────────────────────────────────────────────── */
+      [data-cell-role='output'] table { border-collapse: collapse !important; font-size: 0.92em; border: 1px solid #1e2d47; overflow: hidden; }
+      [data-cell-role='output'] tr    { background: transparent !important; }
+      [data-cell-role='output'] thead,
+      [data-cell-role='output'] thead tr { background: #0d1220 !important; }
+      [data-cell-role='output'] th {
+        color: #a5b4fc !important; background: #0d1220 !important;
+        font-weight: 600; padding: 9px 16px; font-size: 0.88em;
+        text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid #1e2d47;
+      }
+      [data-cell-role='output'] td {
+        color: #cbd5e1 !important; background: #07080f !important;
+        padding: 8px 16px; border-bottom: 1px solid #141d2e; vertical-align: top;
+      }
+      [data-cell-role='output'] tbody tr:hover td { background: #0d1428 !important; }
+
+      /* ── Blockquotes ─────────────────────────────────────────────── */
+      [data-cell-role='output'] blockquote {
+        border-left: 3px solid #6d28d9 !important; background: #0d1220 !important;
+        padding: 0.7em 1.2em !important; margin: 1.3em 0 !important;
+        color: #cbd5e1 !important; border-radius: 0 6px 6px 0;
+      }
+
+      /* stat cards use inline styles — no class rules needed */
+    </style>
     """)
     return
 
@@ -403,17 +386,22 @@ def _(N_HEADS, N_LAYERS, alt, eps_slider, mo, pl, sink_scores_live):
         .configure(background="#07080f")
     )
 
+    _card = "background:#0d1220;border:1px solid #1e2d47;border-radius:8px;padding:16px 20px;text-align:center;"
+    _val  = "font-size:2em;font-weight:700;line-height:1;margin-bottom:4px;"
+    _lbl  = "font-size:0.75em;color:#8896a8;text-transform:uppercase;letter-spacing:0.05em;font-weight:500;"
+    _sub  = "font-size:0.68em;color:#94a3b8;margin-top:4px;"
+    _grid = "display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;width:100%;max-width:64rem;margin:1.2em auto;"
     mo.vstack([
-        mo.Html(f"""<div class="as-grid">
-          <div class="as-card"><div class="as-val">{_rate:.0%}</div>
-            <div class="as-lbl">Sink rate ε={_eps:.2f}</div>
-            <div class="as-sub">GPT-2 · {_n_sink}/{_df.height} heads</div></div>
-          <div class="as-card"><div class="as-val" style="color:#818cf8">45.97%</div>
-            <div class="as-lbl">LLaMA 3.1 8B</div><div class="as-sub">paper Table 1 · ε=0.3</div></div>
-          <div class="as-card"><div class="as-val" style="color:#818cf8">73.49%</div>
-            <div class="as-lbl">LLaMA 3.1 70B</div><div class="as-sub">paper Table 1 · ε=0.3</div></div>
-          <div class="as-card"><div class="as-val" style="color:#818cf8">78.29%</div>
-            <div class="as-lbl">LLaMA 3.1 405B</div><div class="as-sub">paper Table 1 · ε=0.3</div></div>
+        mo.Html(f"""<div style="{_grid}">
+          <div style="{_card}"><div style="{_val}color:#f59e0b">{_rate:.0%}</div>
+            <div style="{_lbl}">Sink rate ε={_eps:.2f}</div>
+            <div style="{_sub}">GPT-2 · {_n_sink}/{_df.height} heads</div></div>
+          <div style="{_card}"><div style="{_val}color:#818cf8">45.97%</div>
+            <div style="{_lbl}">LLaMA 3.1 8B</div><div style="{_sub}">paper Table 1 · ε=0.3</div></div>
+          <div style="{_card}"><div style="{_val}color:#818cf8">73.49%</div>
+            <div style="{_lbl}">LLaMA 3.1 70B</div><div style="{_sub}">paper Table 1 · ε=0.3</div></div>
+          <div style="{_card}"><div style="{_val}color:#818cf8">78.29%</div>
+            <div style="{_lbl}">LLaMA 3.1 405B</div><div style="{_sub}">paper Table 1 · ε=0.3</div></div>
         </div>"""),
         _hmap,
     ])
@@ -658,16 +646,21 @@ def _(alt, mo, pl):
         .configure_view(stroke="#1e2d47", fill="#0d1220")
         .configure(background="#07080f")
     )
+    _card = "background:#0d1220;border:1px solid #1e2d47;border-radius:8px;padding:16px 20px;text-align:center;"
+    _val  = "font-size:2em;font-weight:700;line-height:1;margin-bottom:4px;"
+    _lbl  = "font-size:0.75em;color:#8896a8;text-transform:uppercase;letter-spacing:0.05em;font-weight:500;"
+    _sub  = "font-size:0.68em;color:#94a3b8;margin-top:4px;"
+    _grid = "display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;width:100%;max-width:64rem;margin:1.2em auto;"
     mo.vstack([
-        mo.Html("""<div class="as-grid">
-          <div class="as-card"><div class="as-val">82.57%</div>
-            <div class="as-lbl">RULER · With BOS</div><div class="as-sub">128k ctx · LLaMA 3.1 8B</div></div>
-          <div class="as-card"><div class="as-val" style="color:#a78bfa">0.00%</div>
-            <div class="as-lbl">RULER · No BOS</div><div class="as-sub">Total failure · 0/N correct</div></div>
-          <div class="as-card"><div class="as-val">80.77%</div>
-            <div class="as-lbl">ARC-Easy · With BOS</div><div class="as-sub">paper Table 2</div></div>
-          <div class="as-card"><div class="as-val" style="color:#a78bfa">28.49%</div>
-            <div class="as-lbl">ARC-Easy · No BOS</div><div class="as-sub">−52 pp drop</div></div>
+        mo.Html(f"""<div style="{_grid}">
+          <div style="{_card}"><div style="{_val}color:#f59e0b">82.57%</div>
+            <div style="{_lbl}">RULER · With BOS</div><div style="{_sub}">128k ctx · LLaMA 3.1 8B</div></div>
+          <div style="{_card}"><div style="{_val}color:#a78bfa">0.00%</div>
+            <div style="{_lbl}">RULER · No BOS</div><div style="{_sub}">Total failure · 0/N correct</div></div>
+          <div style="{_card}"><div style="{_val}color:#f59e0b">80.77%</div>
+            <div style="{_lbl}">ARC-Easy · With BOS</div><div style="{_sub}">paper Table 2</div></div>
+          <div style="{_card}"><div style="{_val}color:#a78bfa">28.49%</div>
+            <div style="{_lbl}">ARC-Easy · No BOS</div><div style="{_sub}">−52 pp drop</div></div>
         </div>"""),
         _chart,
         mo.md("The RULER result is not a regression — it is **total functional failure**. Without BOS, attention has nowhere safe to discard surplus probability mass. Distributions become unstable and representational collapse follows (Proposition 3.1 in the paper). The sink is load-bearing: you cannot train it away without replacing it with something else."),
