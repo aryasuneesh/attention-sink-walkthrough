@@ -196,33 +196,29 @@ def _(mo):
     mo.md(r"""
     # Attention Sinks: Why LLMs Attend to the First Token
 
-    *An interactive walkthrough of [Barbero, Arroyo, Gu et al., COLM 2025 (arXiv:2504.02732)](https://arxiv.org/abs/2504.02732).*
+    *[Barbero, Arroyo, Gu et al., COLM 2025 (arXiv:2504.02732)](https://arxiv.org/abs/2504.02732)*
 
     ---
 
-    You type a sentence. Your language model reads every word. Then it spends **78% of its total attention budget** staring at `<BOS>` — the invisible beginning-of-sequence marker that precedes your actual text.
+    You type a sentence. Your language model reads every word, then spends **78% of its attention budget** on `<BOS>`, the beginning-of-sequence marker that precedes your actual text.
 
-    Not "The". Not "quick". Not the most important word. The marker that literally means *"this is where the text begins."*
+    `<BOS>` carries no semantic content. It marks where text starts. Gradient descent built one of the most capable systems ever produced, and converged on spending most of its attention on a positional placeholder.
 
-    This is called an **attention sink**. It's been observed in every major frontier LLM — GPT, LLaMA, Gemma, and more. For years, researchers knew it happened. Some tried to fix it. Some exploited it. But nobody had a satisfying answer to the obvious question:
+    Researchers had observed this across frontier models for years. They knew how it formed mechanistically. The paper asks why gradient descent *wants* this pattern at all.
 
-    > **Why would gradient descent — the relentless optimizer that built these remarkable models — converge to wasting 78% of attention on a semantically empty token?**
-
-    This paper answers that question. And the answer is surprising: **the sink isn't a bug. It's the cheapest solution to a fundamental mathematical problem in deep Transformers.**
-
-    This notebook walks you through the full detective story, from the observed phenomenon to the theory to the experimental proof.
+    The answer: **the sink is the cheapest solution to a collapse problem in deep Transformers.** Remove it and long-context performance drops to zero.
 
     ---
 
-    ### The Story in Five Acts
+    ### Five acts
 
     | Act | Question | Answer |
     |---|---|---|
-    | **I** | What is the sink and how big is it? | Live demo: watch it happen in real time |
-    | **II** | What's the underlying problem? | Repeated attention *mixes* information until it collapses |
-    | **III** | Why does the math *predict* sinks? | Theorem 3.2: sensitivity bound explodes without them |
-    | **IV** | Do bigger/longer models get stronger sinks? | Yes — confirmed in 120M scratch-trained models and LLaMA 405B |
-    | **V** | Is the sink actually load-bearing? | Remove it → RULER long-context benchmark: 82.57% → **0.00%** |
+    | **I** | How big is the sink? | Live GPT-2 demo |
+    | **II** | What problem does it solve? | Repeated attention mixing collapses representations |
+    | **III** | Why does math predict sinks? | Theorem 3.2: sensitivity bound grows with depth and context |
+    | **IV** | Do bigger/longer models sink harder? | Yes, confirmed in LLaMA 3.1 family and 120M scratch-trained models |
+    | **V** | Is the sink load-bearing? | RULER: 82.57% → **0.00%** without BOS |
     """)
     return
 
@@ -287,12 +283,11 @@ def _(mo):
     mo.md(r"""
     ## Act I: The Strange Obsession
 
-    Every attention head in a Transformer produces a **probability distribution** over past tokens — that's what the softmax guarantees. Each head must put its probability mass *somewhere*. The question is: where does it go?
+    Every attention head produces a probability distribution over past tokens. The softmax guarantees this. Each head must put its probability mass somewhere.
 
-    The heatmap below shows the answer for GPT-2 running on your text. Each cell is one attention head (rows = layers, columns = heads). The color encodes **how much of that head's average attention goes to position 0 (`<BOS>`)**: amber = strong sink, dark = distributed.
+    The heatmap below shows where it goes for GPT-2 on your text. Each cell is one attention head (rows = layers, columns = heads). Color encodes how much of that head's average attention lands on position 0 (`<BOS>`). Amber is a strong sink. Dark is distributed attention.
 
-    Adjust the threshold ε to see which heads qualify as "sinks" under different definitions.
-    The paper uses ε = 0.3 as the default (§2 background).
+    The paper uses ε = 0.3 as the default sink threshold (§2). Adjust it below to explore.
     """)
     return
 
@@ -401,25 +396,13 @@ def _(N_HEADS, N_LAYERS, alt, eps_slider, mo, pl, sink_scores_live):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Act II: The Root Cause — Over-Mixing
+    ## Act II: The Over-Mixing Problem
 
-    Now comes the paper's central insight. To understand *why* sinks form, we need to understand what
-    attention layers *do* to representations over many layers.
+    At each Transformer layer, every token's new representation is a weighted average of past tokens' value vectors. Mix red and blue and you get purple. Mix that with yellow and you get brown. After enough layers, every token converges to the same muddy grey.
 
-    **The mixing machine.** At each Transformer layer, every token's new representation is a
-    weighted *average* of all past tokens' value vectors. Think of mixing paint:
-    merge red and blue → purple. Then merge purple with yellow → brown.
-    After enough layers, everything converges to the same muddy grey.
+    Dong et al. (2021) proved this for linear Transformers (no MLP, no residual): the representation matrix approaches rank 1 with depth. All token representations become identical, a phenomenon called **rank collapse**. With MLPs and residuals, a softer version called **representational collapse** sets in over long contexts (Barbero et al. 2024): tokens near the end of a long sequence lose their distinct identity.
 
-    Mathematically, this is called **rank collapse** (Dong et al. 2021): in a linear Transformer
-    (no MLP, no residual), the representation matrix approaches rank 1 after enough layers —
-    all token representations become identical. Even with MLPs and residuals, a softer version
-    called **representational collapse** occurs over long contexts (Barbero et al. 2024):
-    tokens near the end of a long sequence lose their distinct identity.
-
-    **The demo below** simulates this. Each of the `n` colored lines is a token starting with
-    a distinct random embedding. At each layer, it gets mixed with its causal neighbors via
-    uniform attention. Watch the lines converge.
+    Each colored line below is a token starting with a distinct random embedding. At each layer it gets mixed with its causal neighbors via uniform attention.
     """)
     return
 
@@ -503,22 +486,15 @@ def _(go, mix_alpha, mix_depth, mix_tokens, mo, np):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### What the simulation shows
+    ### Reading the simulation
 
-    - **No sink (strength = 0):** uniform mixing causes all non-BOS tokens to converge to the same average.
-      This is rank collapse in miniature. Information is destroyed.
+    **No sink (strength = 0):** uniform mixing drives all non-BOS tokens to the same average value. Representations collapse.
 
-    - **Full sink (strength = 1):** every token routes all attention to BOS. BOS has a near-zero value
-      (low-norm value vector, as the paper measures). The attention output ≈ 0, so only the
-      **residual stream** carries information forward — the head effectively does *nothing*.
-      Representations stay diverse.
+    **Full sink (strength = 1):** every token routes all attention to BOS, which has a near-zero value vector. The attention output approaches zero, so only the residual stream carries the token forward. Representations stay distinct.
 
-    - **The tradeoff:** a head that never mixes is useless for language modeling. But one that
-      always mixes collapses representations. **Sinks are the model's solution for "turn this head off
-      when there's nothing useful to mix."**
+    A head that never mixes contributes nothing to language modeling. A head that always mixes collapses representations. Sinks let the model turn a head off when there is nothing worth mixing.
 
-    The paper calls this the **approximate no-op**: attending to BOS (which has near-zero norm
-    value vectors) costs the model almost nothing — it's the cheapest possible attention target.
+    The paper calls this the **approximate no-op**: BOS has a near-zero norm value vector, so routing attention there costs almost nothing.
     """)
     return
 
@@ -530,21 +506,17 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Act III: The Mathematics Predicts Sinks
+    ## Act III: The Mathematics
 
-    The paper formalizes this with a **sensitivity bound** (Theorem 3.2, §3.1). The key quantity is:
+    The paper bounds this in Theorem 3.2 (§3.1):
 
     $$\left\| \frac{\partial v_j^{(L)}}{\partial v_i^{(0)}} \right\| \leq C_{\max}^L \sum_{k \in \mathcal{P}_{i \to j}} \bar{\alpha}_{j,k_{L-1}}^{(L)} \cdot \bar{\alpha}_{k_{L-1},k_{L-2}}^{(L-1)} \cdots \bar{\alpha}_{k_1,i}^{(1)}$$
 
-    **In English:** How much does a small change to token *i*'s initial embedding affect token *j*'s final representation after *L* layers?
+    Read it as: a small change to token *i*'s initial embedding propagates through every causal path from *i* to *j* over *L* layers, amplified by C_max^L.
 
-    The bound has two parts:
-    - **C_max^L** — the Lipschitz constant of the model raised to the *L*th power. Grows exponentially with depth. A deeper model has exponentially more potential for perturbations to amplify.
-    - **Path sum** — sum over all causal paths from *i* to *j*, weighted by products of attention coefficients ᾱ. Grows with context length *n* (more paths available) and with how uniformly attention is spread.
+    Two terms drive the bound up. **C_max^L** grows exponentially with depth; a 126-layer model sees this at its worst. The **path sum** grows with context length, since longer sequences have more paths between any two positions.
 
-    **The key insight**: attention sinks directly reduce the path-weight products. When a head routes most of its attention to BOS instead of to meaningful tokens, the path weight through that head drops to nearly zero. The Jacobian stays small. Perturbations don't spread.
-
-    The sliders below let you feel this tradeoff directly.
+    Attention sinks reduce the path-weight products. When a head routes its weight to BOS instead of meaningful tokens, the path through that head carries weight near zero. The Jacobian stays small. Perturbations stop spreading.
     """)
     return
 
@@ -615,17 +587,10 @@ def _(go, mo, np, thm_L, thm_alpha_no_sink, thm_alpha_sink, thm_cmax, thm_n):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### The Two Predictions
+    ### Two testable predictions
 
-    Theorem 3.2 makes two concrete, testable predictions:
-
-    1. **Larger models (deeper, more heads) should develop stronger sinks** — because C_max^L
-       grows exponentially with L, so the model must suppress the path-weight sum more aggressively.
-
-    2. **Models trained on longer contexts should develop stronger sinks** — because more context
-       means more paths through the attention graph, meaning more potential for perturbation spread.
-
-    The next act tests both.
+    1. **Deeper models should develop stronger sinks**, because C_max^L grows exponentially with L and the model needs to suppress the path-weight sum to compensate.
+    2. **Models trained on longer contexts should develop stronger sinks**, because longer sequences create more paths from any token *i* to any token *j*.
     """)
     return
 
@@ -643,7 +608,7 @@ def _(mo):
 
     The paper trains eleven 120M-parameter LLaMA2-style models from scratch, varying only the
     context length (128 → 2048 tokens). Every model processes exactly **5B total tokens** —
-    same compute budget. The sink metric is measured after training.
+    same compute budget. The paper measures the sink metric after training.
 
     *Data below: approximate visual reads from Figure 5(a), paper §4.1. The trend is verified;
     exact values are eyeball-estimated from the figure's y-axis (which ranges 0–40%).*
@@ -699,7 +664,7 @@ def _(mo):
     ### Prediction 2 — Larger models → stronger sinks
 
     The LLaMA 3.1 family provides a clean natural experiment: three models trained with
-    similar pipelines but wildly different scales. The paper measures the sink metric at ε = 0.8
+    similar pipelines at different scales. The paper measures the sink metric at ε = 0.8
     (a high bar: the head must route >80% of its average attention to BOS).
 
     *Data: exact values from Table 1, paper §4.2.*
@@ -762,9 +727,9 @@ def _(alt, mo, pl):
             <div style="font-size:0.65em;color:#94a3b8">126 layers · 16,128 heads</div></div>
         </div>"""),
         _bar2,
-        mo.md("At 405B scale, **nearly 4 out of 5 attention heads** are functionally disabled for most tokens — "
+        mo.md("At 405B scale, **nearly 4 out of 5 attention heads** are functionally disabled for most tokens, "
               "routing to BOS and contributing nothing to the computation via a near-zero value vector. "
-              "Only the residual stream carries the token forward unchanged."),
+              "The token passes through unchanged via the residual stream."),
     ], align="center")
     return
 
@@ -776,7 +741,7 @@ def _(mo):
     mo.md(r"""
     ### The Mechanism: Approximate No-Ops
 
-    How does routing attention to BOS actually prevent mixing? The key is the **value vector norm**.
+    Routing attention to BOS prevents mixing via the **value vector norm**.
 
     The paper (§3.2) measures that BOS has the *smallest L2 norm* among all token value vectors.
     When attention head *h* routes all its attention weight to BOS:
@@ -801,7 +766,7 @@ def _(mo):
     it's dormant behind the sink.
 
     **Try it:** type `it's a cat` in the text box above, then use the head explorer below to
-    click L00/H10. Then type `it is a cat` and compare — the BOS column lights up when no
+    click L00/H10. Then type `it is a cat` and compare: the BOS column lights up when no
     apostrophe is present.
     """)
     return
@@ -821,9 +786,8 @@ def _(mo):
     Amber = strong sink. Dark = distributed attention.
 
     Look for:
-    - **Vertical amber columns** → that head is a sink across all layers
-    - **Isolated bright cell at L0** → specialized heads (like the apostrophe head)
-    - **Middle layers darker** → paper observation: middle layers are most active (§4.2)
+    - **Vertical amber columns** → that head routes to BOS across all layers
+    - **Isolated bright cell at L0** → specialized heads like the apostrophe head (active only in specific contexts)
     """)
     return
 
@@ -985,8 +949,7 @@ def _(mo):
     mo.md(r"""
     ## Act V: Is ⟨BOS⟩ Special?
 
-    Everything so far assumes the sink lives at `<BOS>`. But is there something *inherently*
-    special about that token — or would any first-position token do?
+    Everything so far assumes the sink lives at `<BOS>`. Is that token special, or would any first-position token do?
 
     The paper answers this by training multiple 120M-parameter models on **30B tokens** with
     different data packing strategies (§5, Appendix A.3). Four setups:
@@ -997,8 +960,7 @@ def _(mo):
       can attend to it regardless of document boundaries
     - **No fixed BOS:** `<BOS>` appears only at document boundaries, not pinned
 
-    The key question: if the model is trained *with* fixed BOS, what happens when you *remove*
-    BOS at inference?
+    If the model trains *with* fixed BOS, what happens when you *remove* BOS at inference?
 
     *Data: exact values from Table 2, paper §5.*
     """)
@@ -1050,17 +1012,14 @@ def _(alt, mo, pl):
     mo.vstack([
         _bars,
         mo.md(r"""
-**The key findings** (paper §5 summary):
+Two results stand out (paper §5 summary):
 
 - **With fixed BOS during training, removing BOS at inference destroys the model.**
   Sink metric drops from 90.84% → 0.05%, valid loss jumps from 2.69 → 7.56 (row 3 vs 4).
   Same pattern with intra-doc masking: 90.56% → 0.00%, loss 2.67 → 7.78.
 
-- **Without fixed BOS, the model still finds a sink — just at whichever token is first.**
-  Causal masking without BOS: 65.10% sink rate, normal loss 2.69. The sink forms regardless.
-
-- **The sink formation is *inevitable*.**
-  The model cannot avoid developing it; choices in pre-training only affect which token it latches onto.
+- **Without fixed BOS, the model finds a sink at whichever token is first.**
+  Causal masking without BOS: 65.10% sink rate, normal loss 2.69. Pre-training choices only affect which token the sink latches onto.
         """),
     ], align="center")
     return
@@ -1075,11 +1034,9 @@ def _(mo):
     mo.md(r"""
     ## The Verdict: Remove the Sink → Everything Breaks
 
-    The packing experiments established that sinks form inevitably. But are they actually *useful*?
-    Or just a harmless artifact?
+    The packing experiments established that sinks form regardless of training setup. Are they *useful*, or a harmless artifact?
 
-    The paper answers definitively: **remove the BOS at inference and performance collapses** —
-    especially on long-context tasks where the mixing problem is worst.
+    **Remove the BOS at inference and performance collapses**, especially on long-context tasks where the mixing problem is worst.
 
     *Data: exact values from Table 3, paper §5. Model: Gemma 7B. Context for RULER: 4096 tokens.*
     """)
@@ -1138,14 +1095,9 @@ def _(alt, mo, pl):
         </div>"""),
         _ch4,
         mo.md(r"""
-The **RULER result is not a regression — it is total functional collapse.** RULER tests long-context
-reasoning (4096 tokens). Without BOS, the attention distributions smooth out completely (as shown
-in the mixing simulation above). The model can't maintain distinct representations across the long
-sequence. Every answer is wrong.
+RULER tests long-context reasoning at 4096 tokens. Without BOS, attention distributions smooth out (as shown in the mixing simulation above) and the model fails to maintain distinct representations. The score drops to 0.00%.
 
-Even short-context benchmarks suffer badly (ARC-Easy: −52 percentage points). The sink is not just
-a long-context patch — it provides structural stability at all scales. **The attention sink is
-load-bearing infrastructure. It cannot be removed without replacement.**
+Short-context benchmarks fall too (ARC-Easy: −52 percentage points). The sink provides structural stability at all scales, not only on long sequences.
         """),
     ], align="center")
     return
@@ -1171,7 +1123,7 @@ def _(mo):
     High μ = representations are diverse (model distinguishes tokens).
     Low μ = representations have collapsed (model can't tell tokens apart).
 
-    Click below to compute μ with and without BOS on your current text.
+    The button below runs both computations on your current text.
     """)
     return
 
@@ -1244,8 +1196,7 @@ def _(mo):
     mo.md(r"""
     ## Novel Extension: Strategic Sink Token Placement
 
-    The paper establishes that sinks are *load-bearing and inevitable*. But what if you could
-    engineer them deliberately?
+    The paper establishes that sinks are load-bearing. Can they be engineered deliberately?
 
     **Hypothesis:** A single BOS at position 0 forces all heads to route long-range attention
     to the very start of the sequence. For long contexts, this creates a bottleneck.
@@ -1361,8 +1312,7 @@ def _(mo):
     the worse the problem. Gradient descent discovered the cheapest fix: route most attention to
     `<BOS>`, which has a near-zero value vector, making the head contribute approximately zero
     to the residual stream. The token passes through unchanged. Representations stay diverse.
-    Sinks are not wasted attention — they are *learned switches that turn heads off when the
-    head has nothing useful to contribute*. Remove the switch and the model breaks.
+    Sinks are *learned switches that turn heads off when they have nothing to contribute*. Remove the switch and the model breaks.
 
     ---
 
