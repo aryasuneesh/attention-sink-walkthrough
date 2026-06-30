@@ -1,0 +1,12 @@
+marimo==0.23.11
+numpy==2.5.0
+polars==1.42.0
+altair==6.2.2
+anywidget==0.11.0
+plotly
+transformers==5.12.1
+traitlets==5.15.1
+
+# torch: install separately with the right CUDA backend
+# CPU:  pip install torch==2.12.1
+# CUDA: pip install torch==2.12.1 --index-url https://download.pytorch.org/whl/cu121
