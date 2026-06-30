@@ -193,149 +193,164 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""
-    # Attention Sinks: Why LLMs Attend to the First Token
-
-    *[Barbero, Arroyo, Gu et al., COLM 2025 (arXiv:2504.02732)](https://arxiv.org/abs/2504.02732)*
-
-    ---
-
-    You type a sentence. Your language model reads every word, then spends **78% of its attention budget** on `<BOS>`, the beginning-of-sequence marker that precedes your actual text.
-
-    `<BOS>` carries no semantic content. It marks where text starts. Gradient descent built one of the most capable systems ever produced, and converged on spending most of its attention on a positional placeholder.
-
-    Researchers had observed this across frontier models for years. They knew how it formed mechanistically. The paper asks why gradient descent *wants* this pattern at all.
-
-    The answer: **the sink is the cheapest solution to a collapse problem in deep Transformers.** Remove it and long-context performance drops to zero.
-
-    ---
-
-    ### Five acts
-
-    | Act | Question | Answer |
-    |---|---|---|
-    | **I** | How big is the sink? | Live GPT-2 demo |
-    | **II** | What problem does it solve? | Repeated attention mixing collapses representations |
-    | **III** | Why does math predict sinks? | Theorem 3.2: sensitivity bound grows with depth and context |
-    | **IV** | Do bigger/longer models sink harder? | Yes, confirmed in LLaMA 3.1 family and 120M scratch-trained models |
-    | **V** | Is the sink load-bearing? | RULER: 82.57% → **0.00%** without BOS |
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
     mo.Html(r"""
-<div style="max-width:64rem;margin:0.5em auto 2em;padding:0 1em">
-  <div style="background:#0d1220;border:1px solid #1e2d47;border-radius:12px;padding:22px 28px">
-    <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
-      <span style="font-family:Space Grotesk,sans-serif;font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.08em;margin-right:6px">Head type:</span>
-      <button id="intro-sink-btn" style="padding:5px 15px;border-radius:6px;border:1.5px solid #f59e0b;background:#1c0a00;color:#f59e0b;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer">&#x25CF; Attention sink</button>
-      <button id="intro-norm-btn" style="padding:5px 15px;border-radius:6px;border:1.5px solid #1e2d47;background:#07080f;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer">&#x25CB; Normal head</button>
+<div style="max-width:64rem;margin:0 auto 2em;padding:0 1em;font-family:Inter,sans-serif">
+
+  <div style="margin-bottom:1.4em">
+    <p style="color:#cbd5e1;font-size:1.05em;line-height:1.65;margin:0 0 0.5em">
+      A language model reading the sentence below just processed every word.
+      Then it spent most of its attention budget on a single token — one that
+      carries no semantic content at all.
+    </p>
+    <p style="color:#94a3b8;font-size:0.9em;margin:0">
+      <strong style="color:#f8fafc">Click the token you think received the most attention.</strong>
+    </p>
+  </div>
+
+  <!-- Token chips -->
+  <div id="hg-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.5em">
+  </div>
+
+  <!-- Reveal area (hidden until click) -->
+  <div id="hg-reveal" style="display:none">
+    <div style="background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:20px 24px">
+      <div id="hg-verdict" style="font-size:1em;margin-bottom:14px;color:#e2e8f0"></div>
+      <!-- Bar chart -->
+      <div id="hg-bars" style="display:flex;flex-direction:column;gap:5px"></div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #1e2d47;font-size:0.82em;color:#64748b;line-height:1.55">
+        Measured on GPT-2 (Layer 5, Head 2) · sentence: &ldquo;The cat sat on the mat&rdquo; · values approximate real model output
+      </div>
     </div>
-    <div id="intro-attn-svg" style="overflow-x:auto"></div>
-    <div id="intro-attn-cap" style="font-family:Inter,sans-serif;font-size:12.5px;color:#94a3b8;margin-top:14px;text-align:center;min-height:40px;line-height:1.55"></div>
-    <div style="font-family:Inter,sans-serif;font-size:11px;color:#334155;margin-top:6px;text-align:center">
-      Illustrative &middot; &ldquo;The cat sat on the mat&rdquo; &middot; row = query token, column = key (where attention goes)
+
+    <div style="margin-top:1.2em;background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:18px 22px">
+      <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0 0 0.5em">
+        <strong style="color:#f59e0b">&lt;BOS&gt;</strong> is the beginning-of-sequence marker. It precedes every prompt, carries no meaning, and yet absorbs the majority of attention in many heads across GPT-2, LLaMA, Gemma, and Mistral.
+      </p>
+      <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0">
+        Barbero et al. (COLM 2025) asked <em>why gradient descent converges on this</em> — and found the sink is the cheapest solution to a representation collapse problem built into every deep Transformer.
+      </p>
     </div>
   </div>
+
 </div>
+
 <script>
 (function () {
-  var TOKENS = ['<BOS>', 'The', 'cat', 'sat', 'on', 'the', 'mat'];
-  var SINK = [
-    [1.00, 0,    0,    0,    0,    0,    0   ],
-    [0.82, 0.18, 0,    0,    0,    0,    0   ],
-    [0.75, 0.12, 0.13, 0,    0,    0,    0   ],
-    [0.71, 0.10, 0.09, 0.10, 0,    0,    0   ],
-    [0.68, 0.08, 0.07, 0.08, 0.09, 0,    0   ],
-    [0.72, 0.06, 0.05, 0.06, 0.05, 0.06, 0   ],
-    [0.69, 0.05, 0.06, 0.05, 0.05, 0.05, 0.05]
-  ];
-  var NORM = [
-    [1.00, 0,    0,    0,    0,    0,    0   ],
-    [0.32, 0.68, 0,    0,    0,    0,    0   ],
-    [0.07, 0.52, 0.41, 0,    0,    0,    0   ],
-    [0.05, 0.07, 0.60, 0.28, 0,    0,    0   ],
-    [0.04, 0.04, 0.26, 0.52, 0.14, 0,    0   ],
-    [0.04, 0.04, 0.07, 0.26, 0.42, 0.17, 0   ],
-    [0.03, 0.03, 0.04, 0.07, 0.22, 0.44, 0.17]
-  ];
+  var TOKENS = ['&lt;BOS&gt;', 'The', 'cat', 'sat', 'on', 'the', 'mat', '.'];
+  var RAW    = ['<BOS>', 'The', 'cat', 'sat', 'on', 'the', 'mat', '.'];
+  var ATTN   = [0.74, 0.09, 0.05, 0.04, 0.03, 0.03, 0.02, 0.00];
 
-  function cSink(w) {
-    return 'rgb(' + Math.round(w*245+(1-w)*13) + ',' + Math.round(w*158+(1-w)*18) + ',' + Math.round(w*11+(1-w)*32) + ')';
-  }
-  function cNorm(w) {
-    return 'rgb(' + Math.round(w*56+(1-w)*13) + ',' + Math.round(w*189+(1-w)*18) + ',' + Math.round(w*248+(1-w)*32) + ')';
-  }
+  var chips = document.getElementById('hg-chips');
+  var reveal = document.getElementById('hg-reveal');
+  var verdict = document.getElementById('hg-verdict');
+  var bars = document.getElementById('hg-bars');
 
-  function draw(mode) {
-    var attn = mode === 'sink' ? SINK : NORM;
-    var cf   = mode === 'sink' ? cSink : cNorm;
-    var acc  = mode === 'sink' ? '#f59e0b' : '#7dd3fc';
-    var N = TOKENS.length;
-    var CW=42, CH=28, GX=3, GY=3, LP=52, TP=40;
-    var W = LP + N*(CW+GX);
-    var H = TP + N*(CH+GY) + 18;
-    var s = '';
+  var clicked = false;
 
-    for (var k=0; k<N; k++) {
-      var x = LP + k*(CW+GX) + CW/2;
-      var tok = TOKENS[k].replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      s += '<text x="'+x+'" y="26" text-anchor="middle" font-size="10.5" fill="'+(k===0?acc:'#475569')+'" font-weight="'+(k===0?'700':'400')+'" font-family="JetBrains Mono,monospace">'+tok+'</text>';
-    }
-
-    for (var q=0; q<N; q++) {
-      var y = TP + q*(CH+GY);
-      var tok2 = TOKENS[q].replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      s += '<text x="'+(LP-6)+'" y="'+(y+CH/2+4)+'" text-anchor="end" font-size="10.5" fill="'+(q===0?acc:'#475569')+'" font-family="JetBrains Mono,monospace">'+tok2+'</text>';
-      for (var k2=0; k2<=q; k2++) {
-        var x2 = LP + k2*(CW+GX);
-        var w  = attn[q][k2];
-        s += '<rect x="'+x2+'" y="'+y+'" width="'+CW+'" height="'+CH+'" rx="3" fill="'+(w>0?cf(w):'#0d1220')+'"><title>'+TOKENS[q]+' → '+TOKENS[k2]+': '+(w*100).toFixed(1)+'%</title></rect>';
-        if (w > 0.10) {
-          var tc = w > 0.55 ? '#07080f' : '#94a3b8';
-          s += '<text x="'+(x2+CW/2)+'" y="'+(y+CH/2+4)+'" text-anchor="middle" font-size="9" fill="'+tc+'" font-family="JetBrains Mono,monospace">'+(w*100).toFixed(0)+'%</text>';
-        }
+  TOKENS.forEach(function (tok, i) {
+    var btn = document.createElement('button');
+    var isBOS = i === 0;
+    btn.innerHTML = tok;
+    btn.dataset.idx = i;
+    btn.style.cssText = [
+      'padding:8px 16px',
+      'border-radius:8px',
+      'border:1.5px solid ' + (isBOS ? '#1e2d47' : '#1e2d47'),
+      'background:' + (isBOS ? '#0d1220' : '#0a0e1a'),
+      'color:' + (isBOS ? '#475569' : '#94a3b8'),
+      'font-family:JetBrains Mono,monospace',
+      'font-size:13px',
+      'cursor:pointer',
+      'transition:all 0.15s',
+    ].join(';');
+    btn.addEventListener('mouseenter', function () {
+      if (!clicked) { btn.style.borderColor = '#7dd3fc'; btn.style.color = '#e2e8f0'; }
+    });
+    btn.addEventListener('mouseleave', function () {
+      if (!clicked) {
+        btn.style.borderColor = '#1e2d47';
+        btn.style.color = isBOS ? '#475569' : '#94a3b8';
       }
-    }
+    });
+    btn.addEventListener('click', function () {
+      if (clicked) return;
+      clicked = true;
+      revealResult(i);
+    });
+    chips.appendChild(btn);
+  });
 
-    for (var q2=0; q2<N; q2++) {
-      var y2 = TP + q2*(CH+GY);
-      s += '<rect x="'+LP+'" y="'+y2+'" width="'+CW+'" height="'+CH+'" rx="3" fill="none" stroke="'+acc+'" stroke-width="1.5" opacity="0.35"/>';
-    }
+  function revealResult(chosen) {
+    // Gray out all chips, highlight chosen and winner
+    var allBtns = chips.querySelectorAll('button');
+    allBtns.forEach(function (b, i) {
+      b.style.cursor = 'default';
+      if (i === 0) {
+        // BOS = winner, amber
+        b.style.borderColor = '#f59e0b';
+        b.style.background = '#1c0a00';
+        b.style.color = '#f59e0b';
+        b.style.fontWeight = '700';
+      } else if (i === chosen && chosen !== 0) {
+        b.style.borderColor = '#f87171';
+        b.style.background = '#1a0707';
+        b.style.color = '#f87171';
+      } else {
+        b.style.borderColor = '#0f1623';
+        b.style.background = '#070a10';
+        b.style.color = '#334155';
+      }
+    });
 
-    s += '<text x="'+(LP+CW/2)+'" y="'+(H-2)+'" text-anchor="middle" font-size="9" fill="'+acc+'" font-family="Inter,sans-serif" font-weight="600" opacity="0.7">'+(mode==='sink'?'&#x2190; SINK':'&#x2190; DISPR.')+'</text>';
-
-    document.getElementById('intro-attn-svg').innerHTML =
-      '<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:'+W+'px;display:block;margin:0 auto">'+s+'</svg>';
-
-    document.getElementById('intro-attn-cap').innerHTML = mode === 'sink'
-      ? '<span style="color:'+acc+'">● Sink head</span>: &lt;BOS&gt; absorbs 68–82% of each row’s budget. Attending to BOS contributes ~0 to the residual stream — the head is switched off.'
-      : '<span style="color:'+acc+'">○ Normal head</span>: attention flows to recent, semantically related tokens. No single position dominates.';
-  }
-
-  function setActive(mode) {
-    var sb = document.getElementById('intro-sink-btn');
-    var nb = document.getElementById('intro-norm-btn');
-    var base = 'padding:5px 15px;border-radius:6px;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;border:1.5px solid ';
-    if (mode === 'sink') {
-      sb.style.cssText = base + '#f59e0b;background:#1c0a00;color:#f59e0b;';
-      nb.style.cssText = base + '#1e2d47;background:#07080f;color:#475569;';
+    // Verdict
+    if (chosen === 0) {
+      verdict.innerHTML = '<span style="color:#4ade80;font-weight:700">Correct!</span> &lt;BOS&gt; absorbed <strong>74%</strong> of attention — the model was barely looking at your words at all.';
     } else {
-      nb.style.cssText = base + '#7dd3fc;background:#0c1a2e;color:#7dd3fc;';
-      sb.style.cssText = base + '#1e2d47;background:#07080f;color:#475569;';
+      verdict.innerHTML = '<span style="color:#f87171;font-weight:700">Incorrect.</span> &ldquo;' + RAW[chosen] + '&rdquo; got only <strong>' + (ATTN[chosen]*100).toFixed(0) + '%</strong>. <strong style="color:#f59e0b">&lt;BOS&gt; took 74%.</strong> The model spent most of its attention on a positional placeholder.';
     }
-    draw(mode);
-  }
 
-  document.getElementById('intro-sink-btn').addEventListener('click', function () { setActive('sink'); });
-  document.getElementById('intro-norm-btn').addEventListener('click', function () { setActive('normal'); });
-  setActive('sink');
+    // Build animated bar chart
+    bars.innerHTML = '';
+    ATTN.forEach(function (w, i) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px';
+
+      var label = document.createElement('div');
+      label.innerHTML = TOKENS[i];
+      label.style.cssText = 'width:56px;text-align:right;font-family:JetBrains Mono,monospace;font-size:11px;color:' + (i === 0 ? '#f59e0b' : (i === chosen && chosen !== 0 ? '#f87171' : '#475569')) + ';flex-shrink:0';
+
+      var track = document.createElement('div');
+      track.style.cssText = 'flex:1;background:#0a0e1a;border-radius:3px;height:16px;overflow:hidden';
+
+      var fill = document.createElement('div');
+      var fillColor = i === 0 ? '#f59e0b' : (i === chosen && chosen !== 0 ? '#f87171' : '#334155');
+      fill.style.cssText = 'height:100%;width:0%;background:' + fillColor + ';border-radius:3px;transition:width 0.6s ease ' + (i * 60) + 'ms';
+
+      var pct = document.createElement('div');
+      pct.style.cssText = 'width:36px;font-family:JetBrains Mono,monospace;font-size:11px;color:' + (i === 0 ? '#f59e0b' : '#475569');
+      pct.textContent = (w * 100).toFixed(0) + '%';
+
+      track.appendChild(fill);
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(pct);
+      bars.appendChild(row);
+
+      // Animate bar after paint
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          fill.style.width = (w * 100) + '%';
+        });
+      });
+    });
+
+    reveal.style.display = 'block';
+  }
 }());
 </script>
 """)
     return
+
 
 
 # ── Python imports ─────────────────────────────────────────────────────────────
@@ -515,86 +530,266 @@ def _(mo):
 
     At each Transformer layer, every token's new representation is a weighted average of past tokens' value vectors. Mix red and blue and you get purple. Mix that with yellow and you get brown. After enough layers, every token converges to the same muddy grey.
 
-    Dong et al. (2021) proved this for linear Transformers (no MLP, no residual): the representation matrix approaches rank 1 with depth. All token representations become identical, a phenomenon called **rank collapse**. With MLPs and residuals, a softer version called **representational collapse** sets in over long contexts (Barbero et al. 2024): tokens near the end of a long sequence lose their distinct identity.
+    Dong et al. (2021) proved this for linear Transformers: the representation matrix approaches rank 1 with depth. All token representations become identical, a phenomenon called **rank collapse**. With MLPs and residuals, a softer version called **representational collapse** sets in over long contexts (Barbero et al. 2024): tokens near the end of a long sequence lose their distinct identity.
 
-    Each colored line below is a token starting with a distinct random embedding. At each layer it gets mixed with its causal neighbors via uniform attention.
+    The simulator below runs 12 rounds of attention mixing on 7 tokens. Each circle is a token's position in representation space. Press **PLAY** and watch what happens.
     """)
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
-    mix_depth  = mo.ui.slider(1, 32, step=1,  value=6,  label="Depth L (number of mixing layers)", show_value=True)
-    mix_tokens = mo.ui.slider(4, 16, step=1,  value=8,  label="Sequence length n", show_value=True)
-    mix_alpha  = mo.ui.slider(0.0, 1.0, step=0.05, value=1.0,
-                              label="Sink strength  (1 = full sink, 0 = no sink)", show_value=True)
-    mo.vstack([mix_depth, mix_tokens, mix_alpha])
-    return mix_alpha, mix_depth, mix_tokens
+    mo.Html(r"""
+<div style="max-width:64rem;margin:0 auto 1.5em;padding:0 1em;font-family:Inter,sans-serif">
+<div style="background:#0d1220;border:1px solid #1e2d47;border-radius:12px;padding:20px 24px">
 
+  <!-- Controls row -->
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
+    <button id="ps-play" style="padding:7px 20px;border-radius:7px;border:1.5px solid #60a5fa;background:#0c1a2e;color:#60a5fa;font-family:JetBrains Mono,monospace;font-size:12px;cursor:pointer;font-weight:600">▶ PLAY</button>
+    <button id="ps-reset" style="padding:7px 16px;border-radius:7px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#64748b;font-family:JetBrains Mono,monospace;font-size:12px;cursor:pointer">↺ RESET</button>
 
-@app.cell
-def _(go, mix_alpha, mix_depth, mix_tokens, mo, np):
-    _n = mix_tokens.value
-    _L = mix_depth.value
-    _s = mix_alpha.value   # fraction of attention routed to sink (position 0)
-    _rng = np.random.default_rng(42)
-    # Each token starts with a 1-D "identity" value: token i starts near i/(n-1)
-    _V = np.linspace(0.0, 1.0, _n)   # shape [n]
+    <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
+      <span style="font-size:11.5px;color:#94a3b8;font-family:Inter,sans-serif">BOS Sink:</span>
+      <button id="ps-sink-off" style="padding:5px 12px;border-radius:6px;border:1.5px solid #f87171;background:#1a0707;color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600">OFF</button>
+      <button id="ps-sink-on" style="padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer">ON</button>
+    </div>
 
-    # Build causal uniform attention matrix [n, n], lower triangular, each row sums to 1
-    # With sink: row i sends fraction _s to position 0, rest uniform over remaining causal tokens
-    def _apply_mix(V, s):
-        _Vnew = np.zeros_like(V)
-        for i in range(len(V)):
-            if i == 0:
-                _Vnew[i] = V[0]   # BOS attends only to itself
-                continue
-            _w = np.zeros(i + 1)
-            _w[0] = s                   # sink weight at position 0
-            _rest = np.ones(i) / i      # uniform over non-sink past tokens
-            _w[1:] = _rest * (1 - s)
-            _Vnew[i] = _w @ V[:i + 1]
-        return _Vnew
+    <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
+      <span style="font-size:11.5px;color:#94a3b8;font-family:Inter,sans-serif">ε:</span>
+      <input id="ps-eps" type="range" min="0.3" max="0.95" step="0.05" value="0.75" style="width:80px;accent-color:#f59e0b">
+      <span id="ps-eps-val" style="font-family:JetBrains Mono,monospace;font-size:11px;color:#f59e0b;width:28px">0.75</span>
+    </div>
 
-    _history = [_V.copy()]
-    _V_sim = _V.copy()
-    for _ in range(_L):
-        _V_sim = _apply_mix(_V_sim, _s)
-        _history.append(_V_sim.copy())
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+      <span style="font-size:11.5px;color:#64748b;font-family:Inter,sans-serif">Layer:</span>
+      <span id="ps-step" style="font-family:JetBrains Mono,monospace;font-size:14px;color:#e2e8f0;font-weight:700">0 / 12</span>
+    </div>
+  </div>
 
-    _colors = [f"hsl({int(270*i/max(_n-1,1))},60%,65%)" for i in range(_n)]
-    _fig = go.Figure()
-    for _ti in range(_n):
-        _label = "⟨BOS⟩" if _ti == 0 else f"tok {_ti}"
-        _fig.add_trace(go.Scatter(
-            x=list(range(_L + 1)),
-            y=[_history[l][_ti] for l in range(_L + 1)],
-            mode="lines+markers", name=_label,
-            line=dict(color=_colors[_ti], width=2 if _ti > 0 else 3),
-            marker=dict(size=5),
-        ))
+  <!-- Canvas -->
+  <div style="position:relative">
+    <svg id="ps-svg" viewBox="0 0 620 340" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;background:#070a12;border-radius:8px;display:block">
+    </svg>
+    <div id="ps-badge" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:10px 22px;border-radius:8px;font-family:Space Grotesk,sans-serif;font-size:1.4em;font-weight:700;letter-spacing:0.02em;pointer-events:none"></div>
+  </div>
 
-    _spread = float(np.std([_history[_L][i] for i in range(1, _n)]))
-    _fig.update_layout(
-        title=dict(text=f"Representation convergence after {_L} layers (spread={_spread:.4f})",
-                   font=dict(color="#e2e8f0", size=14)),
-        xaxis=dict(title="Layer", color="#94a3b8", gridcolor="#1e2d47"),
-        yaxis=dict(title="Token representation value", color="#94a3b8", gridcolor="#1e2d47",
-                   range=[-0.05, 1.05]),
-        legend=dict(font=dict(color="#94a3b8"), bgcolor="#0d1220"),
-        paper_bgcolor="#07080f", plot_bgcolor="#0d1220",
-        margin=dict(l=60, r=20, t=50, b=50), height=340,
-    )
+  <!-- Caption -->
+  <div id="ps-caption" style="margin-top:12px;font-size:12.5px;color:#64748b;font-family:Inter,sans-serif;line-height:1.6;text-align:center">
+    Press PLAY to start. Toggle BOS Sink ON/OFF to see the difference.
+  </div>
 
-    _note = ("Near-zero spread: representations have **collapsed** — all tokens look identical "
-             "to the model." if _spread < 0.05 else
-             "Representations still **distinct** — model can tell tokens apart.")
+</div>
+</div>
 
-    mo.vstack([
-        _fig,
-        mo.md(f"**Spread σ = {_spread:.4f}** at layer {_L}. " + _note +
-              "\n\n*Try: set sink strength to 0 and increase depth. Then set sink strength to 1 and watch collapse slow down.*"),
-    ], align="center")
+<script>
+(function () {
+  var W = 620, H = 340;
+  var TOKENS = ['⟨BOS⟩', 'The', 'cat', 'sat', 'on', 'the', 'mat'];
+  var COLORS = ['#f59e0b', '#60a5fa', '#34d399', '#f87171', '#a78bfa', '#fb923c', '#38bdf8'];
+  var MAX_LAYERS = 12;
+  var ALPHA = 0.28;  // mixing rate per step
+  var TRAIL_LEN = 8;
+
+  // Initial positions — spread so the animation is dramatic
+  var INIT = [
+    {x: 90,  y: 170},   // BOS — left anchor
+    {x: 200, y: 80},    // The
+    {x: 460, y: 70},    // cat
+    {x: 530, y: 185},   // sat
+    {x: 450, y: 290},   // on
+    {x: 220, y: 295},   // the
+    {x: 340, y: 55},    // mat
+  ];
+
+  var pos, trails, step, running, sinkMode, eps, timer;
+
+  function clone(arr) { return arr.map(function(p){ return {x:p.x, y:p.y}; }); }
+
+  function init() {
+    pos    = clone(INIT);
+    trails = INIT.map(function(){ return []; });
+    step   = 0;
+    running = false;
+    render();
+    updateBadge();
+    document.getElementById('ps-step').textContent = '0 / ' + MAX_LAYERS;
+    document.getElementById('ps-play').textContent = '▶ PLAY';
+    document.getElementById('ps-caption').textContent = 'Press PLAY to start. Toggle BOS Sink ON/OFF to see the difference.';
+  }
+
+  function advance() {
+    if (step >= MAX_LAYERS) { pause(); return; }
+
+    // Record trails
+    for (var i = 0; i < pos.length; i++) {
+      trails[i].push({x: pos[i].x, y: pos[i].y});
+      if (trails[i].length > TRAIL_LEN) trails[i].shift();
+    }
+
+    if (sinkMode) {
+      // Tokens route eps fraction to BOS, rest to content centroid
+      // BOS has near-zero value → minimal movement; content tokens barely mix
+      var cx = 0, cy = 0;
+      for (var j = 1; j < pos.length; j++) { cx += pos[j].x; cy += pos[j].y; }
+      cx /= (pos.length - 1); cy /= (pos.length - 1);
+
+      for (var k = 1; k < pos.length; k++) {
+        // Effective pull = (1 - eps) * content_centroid + eps * BOS_contribution
+        // BOS has near-zero value, so BOS contribution → 0
+        // Net: tokens move (1-eps)*alpha toward centroid only
+        var effAlpha = (1 - eps) * ALPHA;
+        pos[k].x += effAlpha * (cx - pos[k].x);
+        pos[k].y += effAlpha * (cy - pos[k].y);
+      }
+      // BOS doesn't move (fixed reference)
+    } else {
+      // No sink: full uniform mixing → convergence
+      var mx = 0, my = 0;
+      for (var m = 0; m < pos.length; m++) { mx += pos[m].x; my += pos[m].y; }
+      mx /= pos.length; my /= pos.length;
+      for (var n = 1; n < pos.length; n++) {
+        pos[n].x += ALPHA * (mx - pos[n].x);
+        pos[n].y += ALPHA * (my - pos[n].y);
+      }
+    }
+
+    step++;
+    document.getElementById('ps-step').textContent = step + ' / ' + MAX_LAYERS;
+    render();
+    updateBadge();
+
+    // Caption
+    if (step >= MAX_LAYERS) {
+      var spread = computeSpread();
+      if (spread < 18) {
+        document.getElementById('ps-caption').textContent =
+          'After ' + MAX_LAYERS + ' layers without a sink, all tokens collapsed to the same representation. The model can no longer tell them apart.';
+      } else {
+        document.getElementById('ps-caption').textContent =
+          'After ' + MAX_LAYERS + ' layers with BOS absorbing ' + Math.round(eps*100) + '% of attention, tokens remain distinct. The sink preserved representational diversity.';
+      }
+    }
+  }
+
+  function computeSpread() {
+    var cx = 0, cy = 0;
+    for (var i = 1; i < pos.length; i++) { cx += pos[i].x; cy += pos[i].y; }
+    cx /= (pos.length - 1); cy /= (pos.length - 1);
+    var s = 0;
+    for (var j = 1; j < pos.length; j++) {
+      var dx = pos[j].x - cx, dy = pos[j].y - cy;
+      s += Math.sqrt(dx*dx + dy*dy);
+    }
+    return s / (pos.length - 1);
+  }
+
+  function play() {
+    running = true;
+    document.getElementById('ps-play').textContent = '⏸ PAUSE';
+    timer = setInterval(advance, 240);
+  }
+
+  function pause() {
+    running = false;
+    clearInterval(timer);
+    document.getElementById('ps-play').textContent = step >= MAX_LAYERS ? '✓ DONE' : '▶ PLAY';
+  }
+
+  function updateBadge() {
+    var badge = document.getElementById('ps-badge');
+    var spread = computeSpread();
+    if (step >= MAX_LAYERS) {
+      if (spread < 18) {
+        badge.style.display = 'block';
+        badge.style.background = 'rgba(248,113,113,0.18)';
+        badge.style.border = '1.5px solid #f87171';
+        badge.style.color = '#f87171';
+        badge.textContent = 'COLLAPSED';
+      } else {
+        badge.style.display = 'block';
+        badge.style.background = 'rgba(52,211,153,0.14)';
+        badge.style.border = '1.5px solid #34d399';
+        badge.style.color = '#34d399';
+        badge.textContent = 'STABLE';
+      }
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  function render() {
+    var svg = document.getElementById('ps-svg');
+    var s = '';
+
+    // Grid lines (subtle)
+    for (var gx = 0; gx <= W; gx += 80) {
+      s += '<line x1="'+gx+'" y1="0" x2="'+gx+'" y2="'+H+'" stroke="#0d1220" stroke-width="1"/>';
+    }
+    for (var gy = 0; gy <= H; gy += 80) {
+      s += '<line x1="0" y1="'+gy+'" x2="'+W+'" y2="'+gy+'" stroke="#0d1220" stroke-width="1"/>';
+    }
+
+    // Trails
+    for (var ti = 1; ti < pos.length; ti++) {
+      var tr = trails[ti];
+      for (var tj = 0; tj < tr.length; tj++) {
+        var opacity = (tj + 1) / (TRAIL_LEN + 1) * 0.4;
+        var r = 3 + tj * 0.5;
+        s += '<circle cx="'+tr[tj].x.toFixed(1)+'" cy="'+tr[tj].y.toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+COLORS[ti]+'" opacity="'+opacity.toFixed(2)+'"/>';
+      }
+    }
+
+    // BOS special glow ring
+    s += '<circle cx="'+INIT[0].x+'" cy="'+INIT[0].y+'" r="22" fill="none" stroke="#f59e0b" stroke-width="1" opacity="0.25" stroke-dasharray="4,3"/>';
+    s += '<circle cx="'+INIT[0].x+'" cy="'+INIT[0].y+'" r="14" fill="#1c0a00" stroke="#f59e0b" stroke-width="1.5"/>';
+    s += '<text x="'+INIT[0].x+'" y="'+(INIT[0].y+4)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#f59e0b" font-weight="700">BOS</text>';
+
+    // Token circles
+    for (var ci = 1; ci < pos.length; ci++) {
+      var px = pos[ci].x.toFixed(1), py = pos[ci].y.toFixed(1);
+      s += '<circle cx="'+px+'" cy="'+py+'" r="14" fill="'+COLORS[ci]+'" opacity="0.9"/>';
+      s += '<text x="'+px+'" y="'+(pos[ci].y+4).toFixed(1)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#07080f" font-weight="700">'+TOKENS[ci]+'</text>';
+    }
+
+    // Spread indicator (top-right)
+    var sp = computeSpread().toFixed(0);
+    var spColor = parseFloat(sp) < 18 ? '#f87171' : '#34d399';
+    s += '<text x="'+(W-10)+'" y="20" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="10" fill="'+spColor+'">spread='+sp+'</text>';
+
+    svg.innerHTML = s;
+  }
+
+  // Wiring
+  document.getElementById('ps-play').addEventListener('click', function () {
+    if (step >= MAX_LAYERS) { init(); return; }
+    if (running) { pause(); } else { play(); }
+  });
+  document.getElementById('ps-reset').addEventListener('click', function () {
+    pause(); init();
+  });
+  document.getElementById('ps-sink-on').addEventListener('click', function () {
+    sinkMode = true;
+    this.style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #f59e0b;background:#1c0a00;color:#f59e0b;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600';
+    document.getElementById('ps-sink-off').style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer';
+  });
+  document.getElementById('ps-sink-off').addEventListener('click', function () {
+    sinkMode = false;
+    this.style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #f87171;background:#1a0707;color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600';
+    document.getElementById('ps-sink-on').style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer';
+  });
+  document.getElementById('ps-eps').addEventListener('input', function () {
+    eps = parseFloat(this.value);
+    document.getElementById('ps-eps-val').textContent = eps.toFixed(2);
+  });
+
+  // Init state
+  sinkMode = false;
+  eps = 0.75;
+  init();
+}());
+</script>
+""")
     return
 
 
@@ -603,9 +798,9 @@ def _(mo):
     mo.md(r"""
     ### Reading the simulation
 
-    **No sink (strength = 0):** uniform mixing drives all non-BOS tokens to the same average value. Representations collapse.
+    **BOS Sink OFF:** uniform mixing drives all tokens to the same average position in representation space. Spread drops to near zero — collapse.
 
-    **Full sink (strength = 1):** every token routes all attention to BOS, which has a near-zero value vector. The attention output approaches zero, so only the residual stream carries the token forward. Representations stay distinct.
+    **BOS Sink ON:** most attention routes to BOS, which has a near-zero value vector. The attention output approaches zero, so only the residual stream carries each token forward. Positions stay distinct.
 
     A head that never mixes contributes nothing to language modeling. A head that always mixes collapses representations. Sinks let the model turn a head off when there is nothing worth mixing.
 
