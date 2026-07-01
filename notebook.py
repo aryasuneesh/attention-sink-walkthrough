@@ -539,7 +539,9 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.Html(r"""
+    # mo.Html does not execute <script> tags; mo.iframe does (marimo docs, mo.iframe).
+    # This widget's PLAY button is wired up entirely in JS, so it needs the iframe.
+    mo.iframe(r"""
 <div style="max-width:64rem;margin:0 auto 1.5em;padding:0 1em;font-family:Inter,sans-serif">
 <div style="background:#0d1220;border:1px solid #1e2d47;border-radius:12px;padding:20px 24px">
 
@@ -789,7 +791,7 @@ def _(mo):
   init();
 }());
 </script>
-""")
+""", height="720px")
     return
 
 
