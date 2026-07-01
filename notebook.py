@@ -193,7 +193,9 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.Html(r"""
+    # mo.Html does not execute <script> tags; mo.iframe does (marimo docs, mo.iframe).
+    # This widget builds its token chips and click handling entirely in JS.
+    mo.iframe(r"""
 <div style="max-width:64rem;margin:0 auto 2em;padding:0 1em;font-family:Inter,sans-serif">
 
   <div style="margin-bottom:1.4em">
@@ -348,7 +350,7 @@ def _(mo):
   }
 }());
 </script>
-""")
+""", height="750px")
     return
 
 
