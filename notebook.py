@@ -192,165 +192,162 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    # mo.Html does not execute <script> tags; mo.iframe does (marimo docs, mo.iframe).
-    # This widget builds its token chips and click handling entirely in JS.
-    mo.iframe(r"""
-<div style="max-width:64rem;margin:0 auto 2em;padding:0 1em;font-family:Inter,sans-serif">
+def _(anywidget, mo):
+    # mo.Html (and mo.iframe, which depends on the notebook server's virtual-file
+    # serving) proved unreliable for embedded <script> widgets across hosting
+    # contexts. anywidget runs its JS directly in the cell's own DOM node, which
+    # is the same mechanism the Head Explorer widget below already relies on.
+    class TokenQuizWidget(anywidget.AnyWidget):
+        _esm = r"""
+        function render({ el }) {
+          el.innerHTML = `
+          <div style="max-width:64rem;margin:0 auto 2em;padding:0 1em;font-family:Inter,sans-serif">
 
-  <div style="margin-bottom:1.4em">
-    <p style="color:#cbd5e1;font-size:1.05em;line-height:1.65;margin:0 0 0.5em">
-      A language model reading the sentence below just processed every word.
-      Then it spent most of its attention budget on a single token — one that
-      carries no semantic content at all.
-    </p>
-    <p style="color:#94a3b8;font-size:0.9em;margin:0">
-      <strong style="color:#f8fafc">Click the token you think received the most attention.</strong>
-    </p>
-  </div>
+            <div style="margin-bottom:1.4em">
+              <p style="color:#cbd5e1;font-size:1.05em;line-height:1.65;margin:0 0 0.5em">
+                A language model reading the sentence below just processed every word.
+                Then it spent most of its attention budget on a single token — one that
+                carries no semantic content at all.
+              </p>
+              <p style="color:#94a3b8;font-size:0.9em;margin:0">
+                <strong style="color:#f8fafc">Click the token you think received the most attention.</strong>
+              </p>
+            </div>
 
-  <!-- Token chips -->
-  <div id="hg-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.5em">
-  </div>
+            <div id="hg-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.5em"></div>
 
-  <!-- Reveal area (hidden until click) -->
-  <div id="hg-reveal" style="display:none">
-    <div style="background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:20px 24px">
-      <div id="hg-verdict" style="font-size:1em;margin-bottom:14px;color:#e2e8f0"></div>
-      <!-- Bar chart -->
-      <div id="hg-bars" style="display:flex;flex-direction:column;gap:5px"></div>
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #1e2d47;font-size:0.82em;color:#64748b;line-height:1.55">
-        Measured on GPT-2 (Layer 5, Head 2) · sentence: &ldquo;The cat sat on the mat&rdquo; · values approximate real model output
-      </div>
-    </div>
+            <div id="hg-reveal" style="display:none">
+              <div style="background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:20px 24px">
+                <div id="hg-verdict" style="font-size:1em;margin-bottom:14px;color:#e2e8f0"></div>
+                <div id="hg-bars" style="display:flex;flex-direction:column;gap:5px"></div>
+                <div style="margin-top:14px;padding-top:12px;border-top:1px solid #1e2d47;font-size:0.82em;color:#64748b;line-height:1.55">
+                  Measured on GPT-2 (Layer 5, Head 2) · sentence: &ldquo;The cat sat on the mat&rdquo; · values approximate real model output
+                </div>
+              </div>
 
-    <div style="margin-top:1.2em;background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:18px 22px">
-      <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0 0 0.5em">
-        <strong style="color:#f59e0b">&lt;BOS&gt;</strong> is the beginning-of-sequence marker. It precedes every prompt, carries no meaning, and yet absorbs the majority of attention in many heads across GPT-2, LLaMA, Gemma, and Mistral.
-      </p>
-      <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0">
-        Barbero et al. (COLM 2025) asked <em>why gradient descent converges on this</em> — and found the sink is the cheapest solution to a representation collapse problem built into every deep Transformer.
-      </p>
-    </div>
-  </div>
+              <div style="margin-top:1.2em;background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:18px 22px">
+                <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0 0 0.5em">
+                  <strong style="color:#f59e0b">&lt;BOS&gt;</strong> is the beginning-of-sequence marker. It precedes every prompt, carries no meaning, and yet absorbs the majority of attention in many heads across GPT-2, LLaMA, Gemma, and Mistral.
+                </p>
+                <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0">
+                  Barbero et al. (COLM 2025) asked <em>why gradient descent converges on this</em> — and found the sink is the cheapest solution to a representation collapse problem built into every deep Transformer.
+                </p>
+              </div>
+            </div>
 
-</div>
+          </div>
+          `;
 
-<script>
-(function () {
-  var TOKENS = ['&lt;BOS&gt;', 'The', 'cat', 'sat', 'on', 'the', 'mat', '.'];
-  var RAW    = ['<BOS>', 'The', 'cat', 'sat', 'on', 'the', 'mat', '.'];
-  var ATTN   = [0.74, 0.09, 0.05, 0.04, 0.03, 0.03, 0.02, 0.00];
+          const TOKENS = ['&lt;BOS&gt;', 'The', 'cat', 'sat', 'on', 'the', 'mat', '.'];
+          const RAW    = ['<BOS>', 'The', 'cat', 'sat', 'on', 'the', 'mat', '.'];
+          const ATTN   = [0.74, 0.09, 0.05, 0.04, 0.03, 0.03, 0.02, 0.00];
 
-  var chips = document.getElementById('hg-chips');
-  var reveal = document.getElementById('hg-reveal');
-  var verdict = document.getElementById('hg-verdict');
-  var bars = document.getElementById('hg-bars');
+          const chips   = el.querySelector('#hg-chips');
+          const reveal  = el.querySelector('#hg-reveal');
+          const verdict = el.querySelector('#hg-verdict');
+          const bars    = el.querySelector('#hg-bars');
 
-  var clicked = false;
+          let clicked = false;
 
-  TOKENS.forEach(function (tok, i) {
-    var btn = document.createElement('button');
-    var isBOS = i === 0;
-    btn.innerHTML = tok;
-    btn.dataset.idx = i;
-    btn.style.cssText = [
-      'padding:8px 16px',
-      'border-radius:8px',
-      'border:1.5px solid ' + (isBOS ? '#1e2d47' : '#1e2d47'),
-      'background:' + (isBOS ? '#0d1220' : '#0a0e1a'),
-      'color:' + (isBOS ? '#475569' : '#94a3b8'),
-      'font-family:JetBrains Mono,monospace',
-      'font-size:13px',
-      'cursor:pointer',
-      'transition:all 0.15s',
-    ].join(';');
-    btn.addEventListener('mouseenter', function () {
-      if (!clicked) { btn.style.borderColor = '#7dd3fc'; btn.style.color = '#e2e8f0'; }
-    });
-    btn.addEventListener('mouseleave', function () {
-      if (!clicked) {
-        btn.style.borderColor = '#1e2d47';
-        btn.style.color = isBOS ? '#475569' : '#94a3b8';
-      }
-    });
-    btn.addEventListener('click', function () {
-      if (clicked) return;
-      clicked = true;
-      revealResult(i);
-    });
-    chips.appendChild(btn);
-  });
+          TOKENS.forEach(function (tok, i) {
+            const btn = document.createElement('button');
+            const isBOS = i === 0;
+            btn.innerHTML = tok;
+            btn.dataset.idx = i;
+            btn.style.cssText = [
+              'padding:8px 16px',
+              'border-radius:8px',
+              'border:1.5px solid #1e2d47',
+              'background:' + (isBOS ? '#0d1220' : '#0a0e1a'),
+              'color:' + (isBOS ? '#475569' : '#94a3b8'),
+              'font-family:JetBrains Mono,monospace',
+              'font-size:13px',
+              'cursor:pointer',
+              'transition:all 0.15s',
+            ].join(';');
+            btn.addEventListener('mouseenter', function () {
+              if (!clicked) { btn.style.borderColor = '#7dd3fc'; btn.style.color = '#e2e8f0'; }
+            });
+            btn.addEventListener('mouseleave', function () {
+              if (!clicked) {
+                btn.style.borderColor = '#1e2d47';
+                btn.style.color = isBOS ? '#475569' : '#94a3b8';
+              }
+            });
+            btn.addEventListener('click', function () {
+              if (clicked) return;
+              clicked = true;
+              revealResult(i);
+            });
+            chips.appendChild(btn);
+          });
 
-  function revealResult(chosen) {
-    // Gray out all chips, highlight chosen and winner
-    var allBtns = chips.querySelectorAll('button');
-    allBtns.forEach(function (b, i) {
-      b.style.cursor = 'default';
-      if (i === 0) {
-        // BOS = winner, amber
-        b.style.borderColor = '#f59e0b';
-        b.style.background = '#1c0a00';
-        b.style.color = '#f59e0b';
-        b.style.fontWeight = '700';
-      } else if (i === chosen && chosen !== 0) {
-        b.style.borderColor = '#f87171';
-        b.style.background = '#1a0707';
-        b.style.color = '#f87171';
-      } else {
-        b.style.borderColor = '#0f1623';
-        b.style.background = '#070a10';
-        b.style.color = '#334155';
-      }
-    });
+          function revealResult(chosen) {
+            const allBtns = chips.querySelectorAll('button');
+            allBtns.forEach(function (b, i) {
+              b.style.cursor = 'default';
+              if (i === 0) {
+                b.style.borderColor = '#f59e0b';
+                b.style.background = '#1c0a00';
+                b.style.color = '#f59e0b';
+                b.style.fontWeight = '700';
+              } else if (i === chosen && chosen !== 0) {
+                b.style.borderColor = '#f87171';
+                b.style.background = '#1a0707';
+                b.style.color = '#f87171';
+              } else {
+                b.style.borderColor = '#0f1623';
+                b.style.background = '#070a10';
+                b.style.color = '#334155';
+              }
+            });
 
-    // Verdict
-    if (chosen === 0) {
-      verdict.innerHTML = '<span style="color:#4ade80;font-weight:700">Correct!</span> &lt;BOS&gt; absorbed <strong>74%</strong> of attention — the model was barely looking at your words at all.';
-    } else {
-      verdict.innerHTML = '<span style="color:#f87171;font-weight:700">Incorrect.</span> &ldquo;' + RAW[chosen] + '&rdquo; got only <strong>' + (ATTN[chosen]*100).toFixed(0) + '%</strong>. <strong style="color:#f59e0b">&lt;BOS&gt; took 74%.</strong> The model spent most of its attention on a positional placeholder.';
-    }
+            if (chosen === 0) {
+              verdict.innerHTML = '<span style="color:#4ade80;font-weight:700">Correct!</span> &lt;BOS&gt; absorbed <strong>74%</strong> of attention — the model was barely looking at your words at all.';
+            } else {
+              verdict.innerHTML = '<span style="color:#f87171;font-weight:700">Incorrect.</span> &ldquo;' + RAW[chosen] + '&rdquo; got only <strong>' + (ATTN[chosen]*100).toFixed(0) + '%</strong>. <strong style="color:#f59e0b">&lt;BOS&gt; took 74%.</strong> The model spent most of its attention on a positional placeholder.';
+            }
 
-    // Build animated bar chart
-    bars.innerHTML = '';
-    ATTN.forEach(function (w, i) {
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:8px';
+            bars.innerHTML = '';
+            ATTN.forEach(function (w, i) {
+              const row = document.createElement('div');
+              row.style.cssText = 'display:flex;align-items:center;gap:8px';
 
-      var label = document.createElement('div');
-      label.innerHTML = TOKENS[i];
-      label.style.cssText = 'width:56px;text-align:right;font-family:JetBrains Mono,monospace;font-size:11px;color:' + (i === 0 ? '#f59e0b' : (i === chosen && chosen !== 0 ? '#f87171' : '#475569')) + ';flex-shrink:0';
+              const label = document.createElement('div');
+              label.innerHTML = TOKENS[i];
+              label.style.cssText = 'width:56px;text-align:right;font-family:JetBrains Mono,monospace;font-size:11px;color:' + (i === 0 ? '#f59e0b' : (i === chosen && chosen !== 0 ? '#f87171' : '#475569')) + ';flex-shrink:0';
 
-      var track = document.createElement('div');
-      track.style.cssText = 'flex:1;background:#0a0e1a;border-radius:3px;height:16px;overflow:hidden';
+              const track = document.createElement('div');
+              track.style.cssText = 'flex:1;background:#0a0e1a;border-radius:3px;height:16px;overflow:hidden';
 
-      var fill = document.createElement('div');
-      var fillColor = i === 0 ? '#f59e0b' : (i === chosen && chosen !== 0 ? '#f87171' : '#334155');
-      fill.style.cssText = 'height:100%;width:0%;background:' + fillColor + ';border-radius:3px;transition:width 0.6s ease ' + (i * 60) + 'ms';
+              const fill = document.createElement('div');
+              const fillColor = i === 0 ? '#f59e0b' : (i === chosen && chosen !== 0 ? '#f87171' : '#334155');
+              fill.style.cssText = 'height:100%;width:0%;background:' + fillColor + ';border-radius:3px;transition:width 0.6s ease ' + (i * 60) + 'ms';
 
-      var pct = document.createElement('div');
-      pct.style.cssText = 'width:36px;font-family:JetBrains Mono,monospace;font-size:11px;color:' + (i === 0 ? '#f59e0b' : '#475569');
-      pct.textContent = (w * 100).toFixed(0) + '%';
+              const pct = document.createElement('div');
+              pct.style.cssText = 'width:36px;font-family:JetBrains Mono,monospace;font-size:11px;color:' + (i === 0 ? '#f59e0b' : '#475569');
+              pct.textContent = (w * 100).toFixed(0) + '%';
 
-      track.appendChild(fill);
-      row.appendChild(label);
-      row.appendChild(track);
-      row.appendChild(pct);
-      bars.appendChild(row);
+              track.appendChild(fill);
+              row.appendChild(label);
+              row.appendChild(track);
+              row.appendChild(pct);
+              bars.appendChild(row);
 
-      // Animate bar after paint
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          fill.style.width = (w * 100) + '%';
-        });
-      });
-    });
+              requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                  fill.style.width = (w * 100) + '%';
+                });
+              });
+            });
 
-    reveal.style.display = 'block';
-  }
-}());
-</script>
-""", height="750px")
+            reveal.style.display = 'block';
+          }
+        }
+        export default { render };
+        """
+
+    mo.hstack([TokenQuizWidget()], justify="center")
     return
 
 
@@ -540,260 +537,249 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    # mo.Html does not execute <script> tags; mo.iframe does (marimo docs, mo.iframe).
-    # This widget's PLAY button is wired up entirely in JS, so it needs the iframe.
-    mo.iframe(r"""
-<div style="max-width:64rem;margin:0 auto 1.5em;padding:0 1em;font-family:Inter,sans-serif">
-<div style="background:#0d1220;border:1px solid #1e2d47;border-radius:12px;padding:20px 24px">
+def _(anywidget, mo):
+    # mo.Html (and mo.iframe, which depends on the notebook server's virtual-file
+    # serving) proved unreliable for embedded <script> widgets across hosting
+    # contexts. anywidget runs its JS directly in the cell's own DOM node, which
+    # is the same mechanism the Head Explorer widget below already relies on.
+    class OverMixingWidget(anywidget.AnyWidget):
+        _esm = r"""
+        function render({ el }) {
+          el.innerHTML = `
+          <div style="max-width:64rem;margin:0 auto 1.5em;padding:0 1em;font-family:Inter,sans-serif">
+          <div style="background:#0d1220;border:1px solid #1e2d47;border-radius:12px;padding:20px 24px">
 
-  <!-- Controls row -->
-  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
-    <button id="ps-play" style="padding:7px 20px;border-radius:7px;border:1.5px solid #60a5fa;background:#0c1a2e;color:#60a5fa;font-family:JetBrains Mono,monospace;font-size:12px;cursor:pointer;font-weight:600">▶ PLAY</button>
-    <button id="ps-reset" style="padding:7px 16px;border-radius:7px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#64748b;font-family:JetBrains Mono,monospace;font-size:12px;cursor:pointer">↺ RESET</button>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
+              <button id="ps-play" style="padding:7px 20px;border-radius:7px;border:1.5px solid #60a5fa;background:#0c1a2e;color:#60a5fa;font-family:JetBrains Mono,monospace;font-size:12px;cursor:pointer;font-weight:600">▶ PLAY</button>
+              <button id="ps-reset" style="padding:7px 16px;border-radius:7px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#64748b;font-family:JetBrains Mono,monospace;font-size:12px;cursor:pointer">↺ RESET</button>
 
-    <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
-      <span style="font-size:11.5px;color:#94a3b8;font-family:Inter,sans-serif">BOS Sink:</span>
-      <button id="ps-sink-off" style="padding:5px 12px;border-radius:6px;border:1.5px solid #f87171;background:#1a0707;color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600">OFF</button>
-      <button id="ps-sink-on" style="padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer">ON</button>
-    </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
+                <span style="font-size:11.5px;color:#94a3b8;font-family:Inter,sans-serif">BOS Sink:</span>
+                <button id="ps-sink-off" style="padding:5px 12px;border-radius:6px;border:1.5px solid #f87171;background:#1a0707;color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600">OFF</button>
+                <button id="ps-sink-on" style="padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer">ON</button>
+              </div>
 
-    <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
-      <span style="font-size:11.5px;color:#94a3b8;font-family:Inter,sans-serif">ε:</span>
-      <input id="ps-eps" type="range" min="0.3" max="0.95" step="0.05" value="0.75" style="width:80px;accent-color:#f59e0b">
-      <span id="ps-eps-val" style="font-family:JetBrains Mono,monospace;font-size:11px;color:#f59e0b;width:28px">0.75</span>
-    </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
+                <span style="font-size:11.5px;color:#94a3b8;font-family:Inter,sans-serif">ε:</span>
+                <input id="ps-eps" type="range" min="0.3" max="0.95" step="0.05" value="0.75" style="width:80px;accent-color:#f59e0b">
+                <span id="ps-eps-val" style="font-family:JetBrains Mono,monospace;font-size:11px;color:#f59e0b;width:28px">0.75</span>
+              </div>
 
-    <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-      <span style="font-size:11.5px;color:#64748b;font-family:Inter,sans-serif">Layer:</span>
-      <span id="ps-step" style="font-family:JetBrains Mono,monospace;font-size:14px;color:#e2e8f0;font-weight:700">0 / 12</span>
-    </div>
-  </div>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+                <span style="font-size:11.5px;color:#64748b;font-family:Inter,sans-serif">Layer:</span>
+                <span id="ps-step" style="font-family:JetBrains Mono,monospace;font-size:14px;color:#e2e8f0;font-weight:700">0 / 12</span>
+              </div>
+            </div>
 
-  <!-- Canvas -->
-  <div style="position:relative">
-    <svg id="ps-svg" viewBox="0 0 620 340" xmlns="http://www.w3.org/2000/svg"
-         style="width:100%;background:#070a12;border-radius:8px;display:block">
-    </svg>
-    <div id="ps-badge" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:10px 22px;border-radius:8px;font-family:Space Grotesk,sans-serif;font-size:1.4em;font-weight:700;letter-spacing:0.02em;pointer-events:none"></div>
-  </div>
+            <div style="position:relative">
+              <svg id="ps-svg" viewBox="0 0 620 340" xmlns="http://www.w3.org/2000/svg"
+                   style="width:100%;background:#070a12;border-radius:8px;display:block">
+              </svg>
+              <div id="ps-badge" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:10px 22px;border-radius:8px;font-family:Space Grotesk,sans-serif;font-size:1.4em;font-weight:700;letter-spacing:0.02em;pointer-events:none"></div>
+            </div>
 
-  <!-- Caption -->
-  <div id="ps-caption" style="margin-top:12px;font-size:12.5px;color:#64748b;font-family:Inter,sans-serif;line-height:1.6;text-align:center">
-    Press PLAY to start. Toggle BOS Sink ON/OFF to see the difference.
-  </div>
+            <div id="ps-caption" style="margin-top:12px;font-size:12.5px;color:#64748b;font-family:Inter,sans-serif;line-height:1.6;text-align:center">
+              Press PLAY to start. Toggle BOS Sink ON/OFF to see the difference.
+            </div>
 
-</div>
-</div>
+          </div>
+          </div>
+          `;
 
-<script>
-(function () {
-  var W = 620, H = 340;
-  var TOKENS = ['⟨BOS⟩', 'The', 'cat', 'sat', 'on', 'the', 'mat'];
-  var COLORS = ['#f59e0b', '#60a5fa', '#34d399', '#f87171', '#a78bfa', '#fb923c', '#38bdf8'];
-  var MAX_LAYERS = 12;
-  var ALPHA = 0.28;  // mixing rate per step
-  var TRAIL_LEN = 8;
+          const W = 620, H = 340;
+          const TOKENS = ['⟨BOS⟩', 'The', 'cat', 'sat', 'on', 'the', 'mat'];
+          const COLORS = ['#f59e0b', '#60a5fa', '#34d399', '#f87171', '#a78bfa', '#fb923c', '#38bdf8'];
+          const MAX_LAYERS = 12;
+          const ALPHA = 0.28;  // mixing rate per step
+          const TRAIL_LEN = 8;
 
-  // Initial positions — spread so the animation is dramatic
-  var INIT = [
-    {x: 90,  y: 170},   // BOS — left anchor
-    {x: 200, y: 80},    // The
-    {x: 460, y: 70},    // cat
-    {x: 530, y: 185},   // sat
-    {x: 450, y: 290},   // on
-    {x: 220, y: 295},   // the
-    {x: 340, y: 55},    // mat
-  ];
+          const INIT = [
+            {x: 90,  y: 170},   // BOS — left anchor
+            {x: 200, y: 80},    // The
+            {x: 460, y: 70},    // cat
+            {x: 530, y: 185},   // sat
+            {x: 450, y: 290},   // on
+            {x: 220, y: 295},   // the
+            {x: 340, y: 55},    // mat
+          ];
 
-  var pos, trails, step, running, sinkMode, eps, timer;
+          let pos, trails, step, running, sinkMode, eps, timer;
 
-  function clone(arr) { return arr.map(function(p){ return {x:p.x, y:p.y}; }); }
+          function clone(arr) { return arr.map(function(p){ return {x:p.x, y:p.y}; }); }
 
-  function init() {
-    pos    = clone(INIT);
-    trails = INIT.map(function(){ return []; });
-    step   = 0;
-    running = false;
-    render();
-    updateBadge();
-    document.getElementById('ps-step').textContent = '0 / ' + MAX_LAYERS;
-    document.getElementById('ps-play').textContent = '▶ PLAY';
-    document.getElementById('ps-caption').textContent = 'Press PLAY to start. Toggle BOS Sink ON/OFF to see the difference.';
-  }
+          function init() {
+            pos    = clone(INIT);
+            trails = INIT.map(function(){ return []; });
+            step   = 0;
+            running = false;
+            draw();
+            updateBadge();
+            el.querySelector('#ps-step').textContent = '0 / ' + MAX_LAYERS;
+            el.querySelector('#ps-play').textContent = '▶ PLAY';
+            el.querySelector('#ps-caption').textContent = 'Press PLAY to start. Toggle BOS Sink ON/OFF to see the difference.';
+          }
 
-  function advance() {
-    if (step >= MAX_LAYERS) { pause(); return; }
+          function advance() {
+            if (step >= MAX_LAYERS) { pause(); return; }
 
-    // Record trails
-    for (var i = 0; i < pos.length; i++) {
-      trails[i].push({x: pos[i].x, y: pos[i].y});
-      if (trails[i].length > TRAIL_LEN) trails[i].shift();
-    }
+            for (let i = 0; i < pos.length; i++) {
+              trails[i].push({x: pos[i].x, y: pos[i].y});
+              if (trails[i].length > TRAIL_LEN) trails[i].shift();
+            }
 
-    if (sinkMode) {
-      // Tokens route eps fraction to BOS, rest to content centroid
-      // BOS has near-zero value → minimal movement; content tokens barely mix
-      var cx = 0, cy = 0;
-      for (var j = 1; j < pos.length; j++) { cx += pos[j].x; cy += pos[j].y; }
-      cx /= (pos.length - 1); cy /= (pos.length - 1);
+            if (sinkMode) {
+              // Tokens route eps fraction to BOS, rest to content centroid
+              // BOS has near-zero value → minimal movement; content tokens barely mix
+              let cx = 0, cy = 0;
+              for (let j = 1; j < pos.length; j++) { cx += pos[j].x; cy += pos[j].y; }
+              cx /= (pos.length - 1); cy /= (pos.length - 1);
 
-      for (var k = 1; k < pos.length; k++) {
-        // Effective pull = (1 - eps) * content_centroid + eps * BOS_contribution
-        // BOS has near-zero value, so BOS contribution → 0
-        // Net: tokens move (1-eps)*alpha toward centroid only
-        var effAlpha = (1 - eps) * ALPHA;
-        pos[k].x += effAlpha * (cx - pos[k].x);
-        pos[k].y += effAlpha * (cy - pos[k].y);
-      }
-      // BOS doesn't move (fixed reference)
-    } else {
-      // No sink: full uniform mixing → convergence
-      var mx = 0, my = 0;
-      for (var m = 0; m < pos.length; m++) { mx += pos[m].x; my += pos[m].y; }
-      mx /= pos.length; my /= pos.length;
-      for (var n = 1; n < pos.length; n++) {
-        pos[n].x += ALPHA * (mx - pos[n].x);
-        pos[n].y += ALPHA * (my - pos[n].y);
-      }
-    }
+              for (let k = 1; k < pos.length; k++) {
+                const effAlpha = (1 - eps) * ALPHA;
+                pos[k].x += effAlpha * (cx - pos[k].x);
+                pos[k].y += effAlpha * (cy - pos[k].y);
+              }
+            } else {
+              // No sink: full uniform mixing → convergence
+              let mx = 0, my = 0;
+              for (let m = 0; m < pos.length; m++) { mx += pos[m].x; my += pos[m].y; }
+              mx /= pos.length; my /= pos.length;
+              for (let n = 1; n < pos.length; n++) {
+                pos[n].x += ALPHA * (mx - pos[n].x);
+                pos[n].y += ALPHA * (my - pos[n].y);
+              }
+            }
 
-    step++;
-    document.getElementById('ps-step').textContent = step + ' / ' + MAX_LAYERS;
-    render();
-    updateBadge();
+            step++;
+            el.querySelector('#ps-step').textContent = step + ' / ' + MAX_LAYERS;
+            draw();
+            updateBadge();
 
-    // Caption
-    if (step >= MAX_LAYERS) {
-      var spread = computeSpread();
-      if (spread < 18) {
-        document.getElementById('ps-caption').textContent =
-          'After ' + MAX_LAYERS + ' layers without a sink, all tokens collapsed to the same representation. The model can no longer tell them apart.';
-      } else {
-        document.getElementById('ps-caption').textContent =
-          'After ' + MAX_LAYERS + ' layers with BOS absorbing ' + Math.round(eps*100) + '% of attention, tokens remain distinct. The sink preserved representational diversity.';
-      }
-    }
-  }
+            if (step >= MAX_LAYERS) {
+              const spread = computeSpread();
+              if (spread < 18) {
+                el.querySelector('#ps-caption').textContent =
+                  'After ' + MAX_LAYERS + ' layers without a sink, all tokens collapsed to the same representation. The model can no longer tell them apart.';
+              } else {
+                el.querySelector('#ps-caption').textContent =
+                  'After ' + MAX_LAYERS + ' layers with BOS absorbing ' + Math.round(eps*100) + '% of attention, tokens remain distinct. The sink preserved representational diversity.';
+              }
+            }
+          }
 
-  function computeSpread() {
-    var cx = 0, cy = 0;
-    for (var i = 1; i < pos.length; i++) { cx += pos[i].x; cy += pos[i].y; }
-    cx /= (pos.length - 1); cy /= (pos.length - 1);
-    var s = 0;
-    for (var j = 1; j < pos.length; j++) {
-      var dx = pos[j].x - cx, dy = pos[j].y - cy;
-      s += Math.sqrt(dx*dx + dy*dy);
-    }
-    return s / (pos.length - 1);
-  }
+          function computeSpread() {
+            let cx = 0, cy = 0;
+            for (let i = 1; i < pos.length; i++) { cx += pos[i].x; cy += pos[i].y; }
+            cx /= (pos.length - 1); cy /= (pos.length - 1);
+            let s = 0;
+            for (let j = 1; j < pos.length; j++) {
+              const dx = pos[j].x - cx, dy = pos[j].y - cy;
+              s += Math.sqrt(dx*dx + dy*dy);
+            }
+            return s / (pos.length - 1);
+          }
 
-  function play() {
-    running = true;
-    document.getElementById('ps-play').textContent = '⏸ PAUSE';
-    timer = setInterval(advance, 240);
-  }
+          function play() {
+            running = true;
+            el.querySelector('#ps-play').textContent = '⏸ PAUSE';
+            timer = setInterval(advance, 240);
+          }
 
-  function pause() {
-    running = false;
-    clearInterval(timer);
-    document.getElementById('ps-play').textContent = step >= MAX_LAYERS ? '✓ DONE' : '▶ PLAY';
-  }
+          function pause() {
+            running = false;
+            clearInterval(timer);
+            el.querySelector('#ps-play').textContent = step >= MAX_LAYERS ? '✓ DONE' : '▶ PLAY';
+          }
 
-  function updateBadge() {
-    var badge = document.getElementById('ps-badge');
-    var spread = computeSpread();
-    if (step >= MAX_LAYERS) {
-      if (spread < 18) {
-        badge.style.display = 'block';
-        badge.style.background = 'rgba(248,113,113,0.18)';
-        badge.style.border = '1.5px solid #f87171';
-        badge.style.color = '#f87171';
-        badge.textContent = 'COLLAPSED';
-      } else {
-        badge.style.display = 'block';
-        badge.style.background = 'rgba(52,211,153,0.14)';
-        badge.style.border = '1.5px solid #34d399';
-        badge.style.color = '#34d399';
-        badge.textContent = 'STABLE';
-      }
-    } else {
-      badge.style.display = 'none';
-    }
-  }
+          function updateBadge() {
+            const badge = el.querySelector('#ps-badge');
+            const spread = computeSpread();
+            if (step >= MAX_LAYERS) {
+              if (spread < 18) {
+                badge.style.display = 'block';
+                badge.style.background = 'rgba(248,113,113,0.18)';
+                badge.style.border = '1.5px solid #f87171';
+                badge.style.color = '#f87171';
+                badge.textContent = 'COLLAPSED';
+              } else {
+                badge.style.display = 'block';
+                badge.style.background = 'rgba(52,211,153,0.14)';
+                badge.style.border = '1.5px solid #34d399';
+                badge.style.color = '#34d399';
+                badge.textContent = 'STABLE';
+              }
+            } else {
+              badge.style.display = 'none';
+            }
+          }
 
-  function render() {
-    var svg = document.getElementById('ps-svg');
-    var s = '';
+          function draw() {
+            const svg = el.querySelector('#ps-svg');
+            let s = '';
 
-    // Grid lines (subtle)
-    for (var gx = 0; gx <= W; gx += 80) {
-      s += '<line x1="'+gx+'" y1="0" x2="'+gx+'" y2="'+H+'" stroke="#0d1220" stroke-width="1"/>';
-    }
-    for (var gy = 0; gy <= H; gy += 80) {
-      s += '<line x1="0" y1="'+gy+'" x2="'+W+'" y2="'+gy+'" stroke="#0d1220" stroke-width="1"/>';
-    }
+            for (let gx = 0; gx <= W; gx += 80) {
+              s += '<line x1="'+gx+'" y1="0" x2="'+gx+'" y2="'+H+'" stroke="#0d1220" stroke-width="1"/>';
+            }
+            for (let gy = 0; gy <= H; gy += 80) {
+              s += '<line x1="0" y1="'+gy+'" x2="'+W+'" y2="'+gy+'" stroke="#0d1220" stroke-width="1"/>';
+            }
 
-    // Trails
-    for (var ti = 1; ti < pos.length; ti++) {
-      var tr = trails[ti];
-      for (var tj = 0; tj < tr.length; tj++) {
-        var opacity = (tj + 1) / (TRAIL_LEN + 1) * 0.4;
-        var r = 3 + tj * 0.5;
-        s += '<circle cx="'+tr[tj].x.toFixed(1)+'" cy="'+tr[tj].y.toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+COLORS[ti]+'" opacity="'+opacity.toFixed(2)+'"/>';
-      }
-    }
+            for (let ti = 1; ti < pos.length; ti++) {
+              const tr = trails[ti];
+              for (let tj = 0; tj < tr.length; tj++) {
+                const opacity = (tj + 1) / (TRAIL_LEN + 1) * 0.4;
+                const r = 3 + tj * 0.5;
+                s += '<circle cx="'+tr[tj].x.toFixed(1)+'" cy="'+tr[tj].y.toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+COLORS[ti]+'" opacity="'+opacity.toFixed(2)+'"/>';
+              }
+            }
 
-    // BOS special glow ring
-    s += '<circle cx="'+INIT[0].x+'" cy="'+INIT[0].y+'" r="22" fill="none" stroke="#f59e0b" stroke-width="1" opacity="0.25" stroke-dasharray="4,3"/>';
-    s += '<circle cx="'+INIT[0].x+'" cy="'+INIT[0].y+'" r="14" fill="#1c0a00" stroke="#f59e0b" stroke-width="1.5"/>';
-    s += '<text x="'+INIT[0].x+'" y="'+(INIT[0].y+4)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#f59e0b" font-weight="700">BOS</text>';
+            s += '<circle cx="'+INIT[0].x+'" cy="'+INIT[0].y+'" r="22" fill="none" stroke="#f59e0b" stroke-width="1" opacity="0.25" stroke-dasharray="4,3"/>';
+            s += '<circle cx="'+INIT[0].x+'" cy="'+INIT[0].y+'" r="14" fill="#1c0a00" stroke="#f59e0b" stroke-width="1.5"/>';
+            s += '<text x="'+INIT[0].x+'" y="'+(INIT[0].y+4)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#f59e0b" font-weight="700">BOS</text>';
 
-    // Token circles
-    for (var ci = 1; ci < pos.length; ci++) {
-      var px = pos[ci].x.toFixed(1), py = pos[ci].y.toFixed(1);
-      s += '<circle cx="'+px+'" cy="'+py+'" r="14" fill="'+COLORS[ci]+'" opacity="0.9"/>';
-      s += '<text x="'+px+'" y="'+(pos[ci].y+4).toFixed(1)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#07080f" font-weight="700">'+TOKENS[ci]+'</text>';
-    }
+            for (let ci = 1; ci < pos.length; ci++) {
+              const px = pos[ci].x.toFixed(1), py = pos[ci].y.toFixed(1);
+              s += '<circle cx="'+px+'" cy="'+py+'" r="14" fill="'+COLORS[ci]+'" opacity="0.9"/>';
+              s += '<text x="'+px+'" y="'+(pos[ci].y+4).toFixed(1)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#07080f" font-weight="700">'+TOKENS[ci]+'</text>';
+            }
 
-    // Spread indicator (top-right)
-    var sp = computeSpread().toFixed(0);
-    var spColor = parseFloat(sp) < 18 ? '#f87171' : '#34d399';
-    s += '<text x="'+(W-10)+'" y="20" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="10" fill="'+spColor+'">spread='+sp+'</text>';
+            const sp = computeSpread().toFixed(0);
+            const spColor = parseFloat(sp) < 18 ? '#f87171' : '#34d399';
+            s += '<text x="'+(W-10)+'" y="20" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="10" fill="'+spColor+'">spread='+sp+'</text>';
 
-    svg.innerHTML = s;
-  }
+            svg.innerHTML = s;
+          }
 
-  // Wiring
-  document.getElementById('ps-play').addEventListener('click', function () {
-    if (step >= MAX_LAYERS) { init(); return; }
-    if (running) { pause(); } else { play(); }
-  });
-  document.getElementById('ps-reset').addEventListener('click', function () {
-    pause(); init();
-  });
-  document.getElementById('ps-sink-on').addEventListener('click', function () {
-    sinkMode = true;
-    this.style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #f59e0b;background:#1c0a00;color:#f59e0b;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600';
-    document.getElementById('ps-sink-off').style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer';
-  });
-  document.getElementById('ps-sink-off').addEventListener('click', function () {
-    sinkMode = false;
-    this.style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #f87171;background:#1a0707;color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600';
-    document.getElementById('ps-sink-on').style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer';
-  });
-  document.getElementById('ps-eps').addEventListener('input', function () {
-    eps = parseFloat(this.value);
-    document.getElementById('ps-eps-val').textContent = eps.toFixed(2);
-  });
+          el.querySelector('#ps-play').addEventListener('click', function () {
+            if (step >= MAX_LAYERS) { init(); return; }
+            if (running) { pause(); } else { play(); }
+          });
+          el.querySelector('#ps-reset').addEventListener('click', function () {
+            pause(); init();
+          });
+          el.querySelector('#ps-sink-on').addEventListener('click', function () {
+            sinkMode = true;
+            this.style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #f59e0b;background:#1c0a00;color:#f59e0b;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600';
+            el.querySelector('#ps-sink-off').style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer';
+          });
+          el.querySelector('#ps-sink-off').addEventListener('click', function () {
+            sinkMode = false;
+            this.style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #f87171;background:#1a0707;color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer;font-weight:600';
+            el.querySelector('#ps-sink-on').style.cssText = 'padding:5px 12px;border-radius:6px;border:1.5px solid #1e2d47;background:#0a0e1a;color:#475569;font-family:JetBrains Mono,monospace;font-size:11px;cursor:pointer';
+          });
+          el.querySelector('#ps-eps').addEventListener('input', function () {
+            eps = parseFloat(this.value);
+            el.querySelector('#ps-eps-val').textContent = eps.toFixed(2);
+          });
 
-  // Init state
-  sinkMode = false;
-  eps = 0.75;
-  init();
-}());
-</script>
-""", height="720px")
+          sinkMode = false;
+          eps = 0.75;
+          init();
+        }
+        export default { render };
+        """
+
+    mo.hstack([OverMixingWidget()], justify="center")
     return
 
 
