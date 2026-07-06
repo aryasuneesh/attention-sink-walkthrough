@@ -226,10 +226,10 @@ def _(anywidget, mo):
 
               <div style="margin-top:1.2em;background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:18px 22px">
                 <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0 0 0.5em">
-                  <strong style="color:#f59e0b">&lt;BOS&gt;</strong> is the beginning-of-sequence marker. It precedes every prompt, carries no meaning, and yet absorbs the majority of attention in many heads across GPT-2, LLaMA, Gemma, and Mistral.
+                  <strong style="color:#f59e0b">&lt;BOS&gt;</strong> is the beginning-of-sequence marker. It precedes every prompt and carries no meaning, yet whole attention heads dump most of their weight onto it. Separate studies have caught this in GPT-2, LLaMA, Gemma, and Mistral.
                 </p>
                 <p style="color:#94a3b8;font-size:0.88em;line-height:1.65;margin:0">
-                  Barbero et al. (COLM 2025) asked <em>why gradient descent converges on this</em> — and found the sink is the cheapest solution to a representation collapse problem built into every deep Transformer.
+                  <a href="https://arxiv.org/pdf/2504.02732" style="color:#818cf8;text-decoration:none;border-bottom:1px solid #3730a3">Barbero et al. (COLM 2025)</a> asked <em>why gradient descent converges on this</em>, and found the sink is the cheapest solution to a representation collapse problem built into every deep Transformer.
                 </p>
               </div>
             </div>
@@ -528,7 +528,7 @@ def _(mo):
 
     At each Transformer layer, every token's new representation is a weighted average of past tokens' value vectors. Mix red and blue and you get purple. Mix that with yellow and you get brown. After enough layers, every token converges to the same muddy grey.
 
-    Dong et al. (2021) proved this for linear Transformers: the representation matrix approaches rank 1 with depth. All token representations become identical, a phenomenon called **rank collapse**. With MLPs and residuals, a softer version called **representational collapse** sets in over long contexts (Barbero et al. 2024): tokens near the end of a long sequence lose their distinct identity.
+    [Dong et al. (2021)](https://arxiv.org/pdf/2103.03404) proved this for linear Transformers: the representation matrix approaches rank 1 with depth. All token representations become identical, a phenomenon called **rank collapse**. With MLPs and residuals, a softer version called **representational collapse** sets in over long contexts ([Barbero et al. 2024](https://arxiv.org/pdf/2406.04267)): tokens near the end of a long sequence lose their distinct identity.
 
     The simulator below runs 12 rounds of attention mixing on 7 tokens. Each circle is a token's position in representation space. Press **PLAY** and watch what happens.
     """)
@@ -903,30 +903,29 @@ def _(mo):
     mo.md(r"""
     ## Act IV: The Evidence
 
-    ### Prediction 1 — Longer context → stronger sinks
+    ### Prediction 1: Longer context → stronger sinks
 
-    The paper trains eleven 120M-parameter LLaMA2-style models from scratch, varying only the
-    context length (128 → 2048 tokens). Every model processes exactly **5B total tokens** —
+    The paper trains 120M-parameter LLaMA2-style models from scratch at five context lengths
+    (128, 256, 512, 1024, 2048 tokens). Every model processes exactly **5B total tokens**, the
     same compute budget. The paper measures the sink metric after training.
 
-    *Data below: approximate visual reads from Figure 5(a), paper §4.1. The trend is verified;
-    exact values are eyeball-estimated from the figure's y-axis (which ranges 0–40%).*
+    *Data below: read directly off Figure 5(a), paper §4.1 (y-axis range 0–40%).*
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _(alt, mo, pl):
-    # Approximate values from Figure 5(a) — labeled as such.
+    # Values read directly off Figure 5(a) (paper §4.1, page 8).
     # Paper text confirms: "nearly non-existent for very short-context-trained models"
     # and "much more prevalent for models trained on longer contexts" (§4.1).
     _ctx_data = pl.DataFrame({
         "Context Length": [128, 256, 512, 1024, 2048],
-        "Sink Metric (%)": [0.5, 3.5, 11.0, 22.5, 36.0],
-        "Note": ["≈0 (paper confirms)", "~3%", "~11%", "~23%", "~36%"],
+        "Sink Metric (%)": [0.5, 3.5, 26.0, 37.5, 39.0],
+        "Note": ["≈0 (paper confirms)", "~3.5%", "~26%", "~37.5%", "~39%"],
     })
     _bar = (
-        alt.Chart(_ctx_data.to_pandas())
+        alt.Chart(_ctx_data)
         .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
             x=alt.X("Context Length:O", title="Training context length (tokens)",
@@ -951,8 +950,9 @@ def _(alt, mo, pl):
         .configure(background="#07080f")
     )
     mo.vstack([_bar,
-        mo.md("Context length 128 has essentially **no sinks**. Context length 2048 has ~36% of heads qualifying. "
-              "All models achieve similar validation loss — so sinks are not a shortcut, they emerge alongside "
+        mo.md("Context length 128 has essentially **no sinks**. The rate jumps sharply by 512 tokens "
+              "(~26%) and largely saturates by 1024 (~37.5%); 2048 only adds a few more points (~39%). "
+              "All models reach similar validation loss, so sinks aren't a shortcut. They emerge alongside "
               "equivalent language modeling quality.")], align="center")
     return
 
@@ -1155,27 +1155,29 @@ def _(mo):
 
     Routing attention to BOS prevents mixing via the **value vector norm**.
 
-    The paper (§3.2) measures that BOS has the *smallest L2 norm* among all token value vectors.
+    The paper (§3.2) measures this directly for a specific head (see below): among that head's
+    value vectors, BOS has the *smallest L2 norm*, smaller than every other token in the sequence.
     When attention head *h* routes all its attention weight to BOS:
 
     $$z_i^{(\ell,h)} = \sum_{j \leq i} \alpha_{ij}^{(\ell,h)} W_v^{(\ell,h)} v_j^{(\ell)} \approx \alpha_{i,0}^{(\ell,h)} \cdot W_v v_{\text{BOS}}^{(\ell)} \approx \mathbf{0}$$
 
     because the value of BOS, `W_v · v_BOS`, has near-zero norm. This head's contribution to the
-    residual stream is approximately zero — the head is **switched off**. The token passes through
+    residual stream is approximately zero. The head is **switched off**. The token passes through
     unchanged via the residual connection.
 
     ### The Apostrophe Head (Gemma 7B, Layer 1)
 
-    The paper reverse-engineers a specific head (§3.2) with two operating modes:
+    The paper re-examines a specific head (§3.2), originally reverse-engineered in a related
+    [Barbero et al. (2025)](https://arxiv.org/pdf/2410.06205) paper on rotary positional encodings, with two operating modes:
 
     | Condition | Behavior |
     |---|---|
     | Previous token is `'` (apostrophe) | **Fires**: high attention on the apostrophe, large update to residual stream |
     | No apostrophe in context | **Sleeps**: routes all attention to BOS, near-zero update |
 
-    This is a real `if-else` statement implemented in attention weights. The head handles
-    contractions (`don't`, `it's`, `he'll`). When no contractions are present, it costs nothing —
-    it's dormant behind the sink.
+    This is a real `if-else` statement implemented in attention weights. It fires whenever the
+    previous token is a literal apostrophe: contractions like `I'm`, possessives, quoted text,
+    any of it. No apostrophe in sight, and it costs nothing. Dormant behind the sink.
 
     **Try it:** type `it's a cat` in the text box above, then use the head explorer below to
     click L00/H10. Then type `it is a cat` and compare: the BOS column lights up when no
@@ -1465,17 +1467,19 @@ def _(alt, mo, pl):
             "Causal, no fixed BOS\n(infer: text only)",
             "Causal + fixed BOS\n(infer: BOS+text)",
             "Causal + fixed BOS\n(infer: text only — ⚠)",
-            "Intra-doc, no fixed BOS\n(infer: text only)",
+            "Intra-doc, no BOS\n(infer: text only)",
+            "Intra-doc, BOS at doc bounds\n(infer: BOS+text)",
+            "Intra-doc, BOS at doc bounds\n(infer: text only)",
             "Intra-doc + fixed BOS\n(infer: BOS+text)",
             "Intra-doc + fixed BOS\n(infer: text only — ⚠)",
         ],
-        "Sink Metric %": [65.10, 65.15, 90.84, 0.05, 28.23, 90.56, 0.00],
-        "Valid Loss":    [2.69,  2.70,  2.69,  7.56, 2.67,  2.67,  7.78],
-        "Status": ["ok", "ok", "ok", "broken", "ok", "ok", "broken"],
+        "Sink Metric %": [65.10, 65.15, 90.84, 0.05, 28.23, 83.33, 50.24, 90.56, 0.00],
+        "Valid Loss":    [2.69,  2.70,  2.69,  7.56, 2.67,  2.67,  2.68,  2.67,  7.78],
+        "Status": ["ok", "ok", "ok", "broken", "ok", "ok", "ok", "ok", "broken"],
     })
 
     _bars = (
-        alt.Chart(_pack.to_pandas())
+        alt.Chart(_pack)
         .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
             y=alt.Y("Setup:N", title=None, sort=None,
@@ -1489,7 +1493,7 @@ def _(alt, mo, pl):
             tooltip=[alt.Tooltip("Setup:N"), alt.Tooltip("Sink Metric %:Q", format=".2f"),
                      alt.Tooltip("Valid Loss:Q", format=".2f")],
         )
-        .properties(width=440, height=340,
+        .properties(width=440, height=420,
             title=alt.TitleParams(
                 text="Data packing × BOS strategy → sink rate and loss (Table 2, paper §5)",
                 color="#e2e8f0", fontSize=12))
@@ -1500,14 +1504,21 @@ def _(alt, mo, pl):
     mo.vstack([
         _bars,
         mo.md(r"""
-Two results stand out (paper §5 summary):
+Three results stand out (paper §5 summary):
 
 - **With fixed BOS during training, removing BOS at inference destroys the model.**
-  Sink metric drops from 90.84% → 0.05%, valid loss jumps from 2.69 → 7.56 (row 3 vs 4).
+  Sink metric drops from 90.84% → 0.05%, valid loss jumps from 2.69 → 7.56 (causal + fixed BOS).
   Same pattern with intra-doc masking: 90.56% → 0.00%, loss 2.67 → 7.78.
 
 - **Without fixed BOS, the model finds a sink at whichever token is first.**
   Causal masking without BOS: 65.10% sink rate, normal loss 2.69. Pre-training choices only affect which token the sink latches onto.
+
+- **BOS present but not artificially pinned still matters, just less catastrophically.**
+  Intra-doc masking with BOS at natural document boundaries: 83.33% sink rate with BOS at inference,
+  dropping to 50.24% without it, both loss-neutral (2.67 vs 2.68). Compare to the *fixed*-BOS
+  version of the same masking, where removing BOS at inference collapses the sink to 0.00% and
+  breaks the loss. Pinning BOS to position 0 during training makes the model brittle to
+  its removal. Merely seeing BOS at document starts does not.
         """),
     ], align="center")
     return
@@ -1926,7 +1937,7 @@ def _(mo):
     | RULER 4096-ctx without BOS (Gemma 7B) | **0.00%** | Table 3, §5 |
     | ARC-Easy drop (Gemma 7B, −BOS) | **80.77% → 28.49%** | Table 3, §5 |
     | Causal + fixed BOS → remove at inference | **90.84% → 0.05% sink** | Table 2, §5 |
-    | Context 128 vs 2048 sink rate | **~0% → ~36%** | Figure 5a, §4.1 (approx.) |
+    | Context 128 vs 2048 sink rate | **~0% → ~39%** | Figure 5a, §4.1 |
     | Pre-training scale | 120M params, 5B tokens (ctx exp.), 30B tokens (packing exp.) | Appendix A.1 |
 
     ---
@@ -1945,8 +1956,9 @@ def _(mo):
     }
     ```
 
-    *Paper: [arXiv:2504.02732](https://arxiv.org/abs/2504.02732)  ·
-    Code: [github.com/sail-sg/Attention-Sink](https://github.com/sail-sg/Attention-Sink)  ·
+    *Paper: [arXiv:2504.02732](https://arxiv.org/pdf/2504.02732)  ·
+    Code ([Gu et al.'s](https://arxiv.org/pdf/2410.10781) codebase, adapted by the authors for pre-training experiments):
+    [github.com/sail-sg/Attention-Sink](https://github.com/sail-sg/Attention-Sink)  ·
     Built for the [alphaxiv × marimo notebook competition #2](https://alphaXiv.ai).*
     """)
     return
