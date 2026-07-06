@@ -200,7 +200,7 @@ def _(anywidget, mo):
         _esm = r"""
         function render({ el }) {
           el.innerHTML = `
-          <div style="max-width:64rem;margin:0 auto 2em;padding:0 1em;font-family:Inter,sans-serif">
+          <div style="max-width:64rem;margin:0 auto 2em;padding:1.5em 1em;font-family:Inter,sans-serif;background:#07080f">
 
             <div style="margin-bottom:1.4em">
               <p style="color:#cbd5e1;font-size:1.05em;line-height:1.65;margin:0 0 0.5em">
