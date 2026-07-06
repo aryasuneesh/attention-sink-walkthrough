@@ -392,12 +392,12 @@ def _(AutoModelForCausalLM, AutoTokenizer, device, mo, torch):
     BOS_ID    = tokenizer.bos_token_id # 50256
 
     mo.md(f"""
-    **Model loaded:** `{MODEL_ID}` — {N_LAYERS} layers · {N_HEADS} heads/layer · d={D_MODEL}
+    **Model loaded:** `{MODEL_ID}` · {N_LAYERS} layers · {N_HEADS} heads/layer · d={D_MODEL}
     **Device:** `{device}` {'(GPU active ✓)' if device == 'cuda' else '(CPU mode)'}
     **BOS token:** `<|endoftext|>` id={BOS_ID}
 
-    *GPT-2 (124M) was chosen over larger models: same sink phenomenon, 64× smaller, loads in < 5 s,
-    stays interactive on CPU. The paper's findings (from LLaMA 3.1 405B) scale up from here.*
+    *GPT-2 (124M) beats larger models here: same sink phenomenon, 64× smaller, loads in under 5
+    seconds, stays interactive on CPU. The paper's own findings, from LLaMA 3.1 405B, scale up from here.*
     """)
     return BOS_ID, D_MODEL, MODEL_ID, N_HEADS, N_LAYERS, model, tokenizer
 
@@ -787,7 +787,7 @@ def _(mo):
     mo.md(r"""
     ### Reading the simulation
 
-    **BOS Sink OFF:** uniform mixing drives all tokens to the same average position in representation space. Spread drops to near zero — collapse.
+    **BOS Sink OFF:** uniform mixing drives all tokens to the same average position in representation space. Spread collapses to near zero.
 
     **BOS Sink ON:** most attention routes to BOS, which has a near-zero value vector. The attention output approaches zero, so only the residual stream carries each token forward. Positions stay distinct.
 
@@ -877,7 +877,7 @@ def _(go, mo, np, thm_L, thm_alpha_no_sink, thm_alpha_sink, thm_cmax, thm_n):
     _paper_pred = (
         "✓ **Prediction confirmed**: deeper models need stronger sinks (larger L → larger gap)."
         if thm_L.value >= 10 else
-        "Shallow models: the gap is small — sinks not yet urgently needed."
+        "Shallow models: the gap is small, so sinks aren't urgently needed yet."
     )
     mo.vstack([_fig2, mo.md(_paper_pred)], align="center")
     return
@@ -960,7 +960,7 @@ def _(alt, mo, pl):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### Prediction 2 — Larger models → stronger sinks
+    ### Prediction 2: Larger models → stronger sinks
 
     The LLaMA 3.1 family provides a clean natural experiment: three models trained with
     similar pipelines at different scales. The paper measures the sink metric at ε = 0.8
@@ -1041,7 +1041,7 @@ def _(mo):
     ### Live Scaling: GPT-2 Family (124M → 1.5B)
 
     Table 1 uses LLaMA 3.1 to validate Prediction 2. Here we run the same measurement on
-    the open GPT-2 family — four models spanning 12× in parameter count and 4× in depth,
+    the open GPT-2 family: four models spanning 12× in parameter count and 4× in depth,
     loaded and deleted sequentially on the GPU. Same tokenizer, same input text.
     """)
     return
@@ -1136,12 +1136,12 @@ def _(AutoModelForCausalLM, AutoTokenizer, alt, mo, pl, run_scaling, text_input,
         _scaling_out = mo.vstack([
             _chart_s,
             mo.md(f"Computed live on `{_dev_s}`{_mem_s}. "
-                  "Sink rate rises monotonically with depth — GPT-2 XL (48 layers) shows "
+                  "Sink rate rises monotonically with depth. GPT-2 XL (48 layers) shows "
                   "noticeably stronger sinks than Small (12 layers), consistent with C_max^L "
                   "growing exponentially with L in Theorem 3.2."),
         ], align="center")
     else:
-        _scaling_out = mo.md("*Click to run — each model loads, measures, then frees GPU memory before the next.*")
+        _scaling_out = mo.md("*Click to run: each model loads, measures, then frees GPU memory before the next.*")
     _scaling_out
     return
 
@@ -1424,8 +1424,8 @@ def _(alt, attn_live, mo, np, pl):
     mo.vstack([
         _sc_e,
         mo.md(f"**{_n_sink_e}/144 heads** cluster at low entropy + high BOS attention. "
-              "The gap between clusters is wider than a continuous tendency would produce — "
-              "each head is either operating as a sink or it isn't, not interpolating between the two."),
+              "The gap between clusters is wider than a continuous tendency would produce: "
+              "each head either operates as a sink or it doesn't, no interpolation between the two."),
     ], align="center")
     return
 
@@ -1609,9 +1609,9 @@ Short-context benchmarks fall too (ARC-Easy: −52 percentage points). The sink 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Representational Collapse — Live in GPT-2
+    ## Representational Collapse: Live in GPT-2
 
-    The theory predicts that removing BOS should cause representations to become more uniform —
+    The theory predicts that removing BOS should cause representations to become more uniform,
     all tokens converging to similar hidden states (less information separation).
 
     We can measure this directly. **Representational distance** μ(X) is the mean pairwise
@@ -1675,10 +1675,10 @@ def _(BOS_ID, alt, mo, model, pl, run_collapse, text_input, tokenizer, torch):
             .configure_view(stroke="#1e2d47", fill="#0d1220")
             .configure(background="#07080f")
         )
-        _msg = (f"With BOS, representations are **{abs(_d/_mn)*100:.0f}% more diverse** — "
+        _msg = (f"With BOS, representations are **{abs(_d/_mn)*100:.0f}% more diverse**, "
                 f"confirming the over-mixing prediction. " if _d > 0 else
-                f"Representations similar in both conditions on this short text — "
-                f"try a longer sequence to see the effect more clearly.")
+                f"Representations look similar in both conditions on this short text. "
+                f"Try a longer sequence to see the effect more clearly.")
         _collapse_out = mo.vstack([_ch5, mo.md(_msg)])
     else:
         _collapse_out = mo.md("*Click the button to compute μ(X) on the current text.*")
@@ -1793,7 +1793,7 @@ def _(BOS_ID, alt, len_max_slider, mo, model, np, pl, run_len_exp, text_input, t
                   "grows with it."),
         ], align="center")
     else:
-        _len_out = mo.md("*Click to run — measures μ(X) at multiple lengths using your current text repeated.*")
+        _len_out = mo.md("*Click to run: measures μ(X) at multiple lengths using your current text repeated.*")
     _len_out
     return
 
@@ -1811,9 +1811,9 @@ def _(mo):
 
     **Hypothesis:** A single BOS at position 0 forces all heads to route long-range attention
     to the very start of the sequence. For long contexts, this creates a bottleneck.
-    What if we insert additional BOS tokens every *K* positions — distributing the sink load?
+    What if we insert additional BOS tokens every *K* positions, distributing the sink load?
 
-    **Metric:** *effective content coverage* — mean attention weight arriving at non-sink
+    **Metric:** *effective content coverage*: mean attention weight arriving at non-sink
     positions across all heads and layers. Higher = more attention reaching actual content tokens.
 
     **⚠ This experiment is not in the paper.** It is a novel hypothesis, tested here on GPT-2.
@@ -1897,7 +1897,7 @@ in effective content coverage vs. single-BOS baseline ({_best["n_sinks"]} sink t
 This is a novel observation. The tradeoff: smaller K inserts more sinks (distributing the attention
 load) but also consumes more context positions for sink tokens. Larger K preserves content but
 concentrates sink pressure at position 0. The result suggests **sink density as an inference
-hyperparameter** — plug-in, no fine-tuning required. Future validation: test on RULER and
+hyperparameter**: plug-in, no fine-tuning required. Future validation: test on RULER and
 Needle-in-a-Haystack with strategic sink placement as a long-context enhancement technique.
             """),
         ])
