@@ -7,7 +7,6 @@
 #     "anywidget",
 #     "altair",
 #     "polars",
-#     "pandas",
 #     "numpy",
 #     "plotly",
 # ]
@@ -467,7 +466,7 @@ def _(N_HEADS, N_LAYERS, alt, eps_slider, mo, pl, sink_scores_live):
     _rate  = _nsink / _df.height
 
     _hmap = (
-        alt.Chart(_df.to_pandas())
+        alt.Chart(_df)
         .mark_rect(cornerRadius=2, stroke="#07080f", strokeWidth=1)
         .encode(
             x=alt.X("head:O", title="Head",
@@ -982,25 +981,25 @@ def _(alt, mo, pl):
         "Layers": [32, 80, 126],
         "Heads/Layer": [32, 64, 128],
         "Total Heads": [1024, 5120, 16128],
-        "Sink Metric % (ε=0.8)": [45.97, 73.49, 78.29],
+        "Sink Metric %": [45.97, 73.49, 78.29],
     })
     _bar2 = (
-        alt.Chart(_llama_data.to_pandas())
+        alt.Chart(_llama_data)
         .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
         .encode(
             x=alt.X("Model:N", sort=["LLaMA 3.1 8B", "LLaMA 3.1 70B", "LLaMA 3.1 405B"],
                     title=None, axis=alt.Axis(labelColor="#94a3b8", labelFontSize=12)),
-            y=alt.Y("Sink Metric % (ε=0.8):Q", title="Sink metric % (ε = 0.8)",
+            y=alt.Y("Sink Metric %:Q", title="Sink metric % (ε = 0.8)",
                     scale=alt.Scale(domain=[0, 100]),
                     axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
             color=alt.Color("Params (B):Q",
-                scale=alt.Scale(scheme="inferno", domain=[8, 405]),
+                scale=alt.Scale(scheme="inferno", domain=[-150, 450]),
                 legend=None),
             tooltip=[
                 alt.Tooltip("Model:N"),
                 alt.Tooltip("Layers:Q"),
                 alt.Tooltip("Total Heads:Q"),
-                alt.Tooltip("Sink Metric % (ε=0.8):Q", format=".2f"),
+                alt.Tooltip("Sink Metric %:Q", format=".2f"),
             ],
         )
         .properties(width=380, height=260,
@@ -1102,7 +1101,7 @@ def _(AutoModelForCausalLM, AutoTokenizer, alt, mo, pl, run_scaling, text_input,
 
         _df_s = pl.DataFrame(_sc_rows)
         _chart_s = (
-            alt.Chart(_df_s.to_pandas())
+            alt.Chart(_df_s)
             .mark_line(point=alt.OverlayMarkDef(size=80))
             .encode(
                 x=alt.X("Params (M):Q", title="Model parameters (M)",
@@ -1325,7 +1324,7 @@ def _(alt, attn_live, mo, pl, sink_widget, tokens_live):
         _lbl3 = "SINK" if _sc3 > 0.3 else "NORMAL"
         _col3 = "#f59e0b" if _sc3 > 0.3 else "#7dd3fc"
         _ch3  = (
-            alt.Chart(pl.DataFrame(_rows3).to_pandas())
+            alt.Chart(pl.DataFrame(_rows3))
             .mark_rect()
             .encode(
                 x=alt.X("ki:O", title="Key position",
@@ -1394,7 +1393,7 @@ def _(alt, attn_live, mo, np, pl):
     _n_sink_e = _df_e.filter(pl.col("bos_pct") > 30).height
 
     _sc_e = (
-        alt.Chart(_df_e.to_pandas())
+        alt.Chart(_df_e)
         .mark_circle(size=75, opacity=0.85, stroke="#07080f", strokeWidth=0.5)
         .encode(
             x=alt.X("entropy:Q", title="Mean attention entropy H (nats)",
@@ -1544,7 +1543,7 @@ def _(alt, mo, pl):
     _long = _bench.unpivot(index="Benchmark", variable_name="Condition", value_name="Score")
 
     _ch4 = (
-        alt.Chart(_long.to_pandas())
+        alt.Chart(_long)
         .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
             x=alt.X("Condition:N", sort=["With BOS", "Without BOS"], title=None,
@@ -1647,7 +1646,7 @@ def _(BOS_ID, alt, mo, model, pl, run_collapse, text_input, tokenizer, torch):
 
         _df_c = pl.DataFrame({"Condition": ["With BOS", "Without BOS"], "mu": [_mw, _mn]})
         _ch5  = (
-            alt.Chart(_df_c.to_pandas())
+            alt.Chart(_df_c)
             .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5, size=60)
             .encode(
                 x=alt.X("Condition:N", title=None, axis=alt.Axis(labelColor="#94a3b8")),
@@ -1735,7 +1734,7 @@ def _(BOS_ID, alt, len_max_slider, mo, model, np, pl, run_len_exp, text_input, t
             index="Length", variable_name="Condition", value_name="μ(X)")
 
         _line_cl = (
-            alt.Chart(_long_cl.to_pandas())
+            alt.Chart(_long_cl)
             .mark_line(point=alt.OverlayMarkDef(size=55))
             .encode(
                 x=alt.X("Length:Q", title="Sequence length (tokens)",
@@ -1757,7 +1756,7 @@ def _(BOS_ID, alt, len_max_slider, mo, model, np, pl, run_len_exp, text_input, t
             .configure(background="#07080f")
         )
         _gap_line_cl = (
-            alt.Chart(_df_cl.to_pandas())
+            alt.Chart(_df_cl)
             .mark_line(color="#22d3ee", point=alt.OverlayMarkDef(color="#22d3ee", size=55))
             .encode(
                 x=alt.X("Length:Q", title="Sequence length (tokens)",
@@ -1859,7 +1858,7 @@ def _(BOS_ID, alt, k_slider, len_slider, mo, model, pl, run_ext, tokenizer, torc
         _best = _df_e.sort("cov", descending=True).row(0, named=True)
         _pct2 = (_best["cov"] - _cov_b) / max(_cov_b, 1e-8) * 100
         _ch6  = (
-            alt.Chart(_df_e.to_pandas())
+            alt.Chart(_df_e)
             .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
             .encode(
                 x=alt.X("strategy:O", title="Strategy",
