@@ -290,7 +290,7 @@ def _(mo):
 **How this notebook works:**
 
 1. **🔬 Model picker**: switch between GPT-2 Small (124M, 12 layers) and XL (1.5B, 48 layers) to test the paper's Prediction 2, that deeper models sink harder.
-2. **Text boxes**: type a sentence and see which tokens the model actually attends to.
+2. **Text boxes**: type a sentence and see which tokens the model attends to.
 3. **Sliders** (ε thresholds, context length, sink spacing): each one is a variable the paper's theory makes a claim about.
 4. **Click cells** in the head-explorer grid to inspect one attention head's full attention matrix.
         """),
@@ -346,6 +346,24 @@ def _(mo):
     return MODEL_LABELS, MODEL_OPTIONS, get_model_id, model_picker, set_model_id
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ACT I: THE STRANGE OBSESSION
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Act I: The Strange Obsession
+
+    Every attention head produces a probability distribution over past tokens. The softmax guarantees this. Each head must put its probability mass somewhere.
+
+    The heatmap below shows where it goes for GPT-2 on your text. Each cell is one attention head (rows = layers, columns = heads). Color encodes how much of that head's average attention lands on position 0 (`<BOS>`). Amber is a strong sink. Dark is distributed attention.
+
+    The paper uses ε = 0.3 as the default sink threshold (§2). Adjust it below to explore.
+    """)
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo, model_picker):
     model_pick = model_picker("🔬 Lab model (GPT-2 Small → XL)")
@@ -390,29 +408,8 @@ def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, device, get_model_id, mo
     {N_LAYERS * N_HEADS} attention heads total ({_dt_load:.1f}s)
     **Device:** `{device}` {'(GPU active ✓)' if device == 'cuda' else '(CPU mode)'}{_vram}
     **BOS token:** `<|endoftext|>` id={BOS_ID}
-
-    *The paper's own headline numbers come from LLaMA 3.1 405B, with 16,128 heads. The GPT-2
-    family gives you the same phenomenon at four depths you can flip between.*
     """)
     return BOS_ID, D_MODEL, MODEL_ID, N_HEADS, N_LAYERS, model, tokenizer
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ACT I: THE STRANGE OBSESSION
-# ══════════════════════════════════════════════════════════════════════════════
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ## Act I: The Strange Obsession
-
-    Every attention head produces a probability distribution over past tokens. The softmax guarantees this. Each head must put its probability mass somewhere.
-
-    The heatmap below shows where it goes for GPT-2 on your text. Each cell is one attention head (rows = layers, columns = heads). Color encodes how much of that head's average attention lands on position 0 (`<BOS>`). Amber is a strong sink. Dark is distributed attention.
-
-    The paper uses ε = 0.3 as the default sink threshold (§2). Adjust it below to explore.
-    """)
-    return
 
 
 @app.cell
@@ -813,9 +810,9 @@ def _(mo):
     position 0 out of attention**, so no head can reach the sink.
 
     The default is the paper's own Shakespeare paragraph (Appendix C.1) with its own edit,
-    **"greatest" → "best"**, but this cell is a playground: paste any text, pick any word in
-    it, and choose your replacement. Each heatmap cell is ‖h(original) − h(perturbed)‖₂ for
-    one token at one layer. All six sequences run as **two batched GPU forward passes**.
+    **"greatest" → "best"**. Paste any text, pick any word in it, and choose your
+    replacement. Each heatmap cell is ‖h(original) − h(perturbed)‖₂ for one token at one
+    layer. All six sequences run as **two batched GPU forward passes**.
     """)
     return
 
@@ -1145,7 +1142,7 @@ def _(alt, mo, pl):
         .configure(background="#07080f")
     )
     mo.vstack([_bar,
-        mo.md("Context length 128 has essentially **no sinks**. The rate jumps sharply by 512 tokens "
+        mo.md("Context length 128 produces almost **no sinks**. The rate jumps by 512 tokens "
               "(~26%) and largely saturates by 1024 (~37.5%); 2048 only adds a few more points (~39%). "
               "All models reach similar validation loss, so sinks aren't a shortcut. They emerge alongside "
               "equivalent language modeling quality.")], align="center")
@@ -1237,8 +1234,6 @@ def _(mo):
 
     Table 1 uses LLaMA 3.1 to validate Prediction 2. Here we run the same measurement on
     the open GPT-2 family: four models spanning 12× in parameter count and 4× in depth.
-    All four models load into a shared cache and **stay resident in VRAM**, so switching
-    between them later costs no reload time.
     """)
     return
 
@@ -1246,7 +1241,7 @@ def _(mo):
 @app.cell
 def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, alt, device, mo, pl, torch):
     # Fixed probe prompt, not the live text box, so editing text elsewhere never
-    # re-triggers four model loads. Models load fp32 into MODEL_CACHE and stay resident.
+    # re-triggers four model loads.
     import time as _time
     _variants = [
         ("gpt2",        "Small (124M)",  124,  12),
@@ -1320,7 +1315,7 @@ def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, alt, device, mo, pl, tor
     _mem_s = ""
     if device == "cuda":
         _gb_s = torch.cuda.max_memory_allocated() / 1e9
-        _mem_s = f"  ·  peak VRAM: **{_gb_s:.1f} GB** · all four models stay resident for the picker"
+        _mem_s = f"  ·  peak VRAM: **{_gb_s:.1f} GB**"
 
     # Conclusion derived from the live numbers, never asserted ahead of them. Read at the
     # strict ε=0.8 threshold (the paper's Table 1 bar), which has the headroom to show a
@@ -1330,7 +1325,7 @@ def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, alt, device, mo, pl, tor
     _small_r, _large_r = _r08[0], _r08[-1]
     _mono = all(_r08[i] <= _r08[i + 1] + 1e-9 for i in range(len(_r08) - 1))
     if abs(_large_r - _small_r) < 1.0:
-        _trend = "is essentially flat across this depth range (little headroom left at ε=0.8 on this text)"
+        _trend = "stays flat across this depth range (little headroom left at ε=0.8 on this text)"
     elif _mono and _large_r > _small_r:
         _trend = "rises monotonically with depth"
     elif _large_r > _small_r:
@@ -1376,7 +1371,7 @@ def _(model_picker):
 
 @app.cell(hide_code=True)
 def _():
-    # Shared by the GPT-2 census below AND the modern-model test further down —
+    # Shared by the GPT-2 census below and the modern-model test further down;
     # both measure the same 24 prompts so their sink rates are directly comparable.
     CENSUS_DOMAINS = [
         "Biology", "Python code", "Legal contract", "IRC chat", "Recipe",
@@ -1453,22 +1448,30 @@ def _(BOS_ID, CENSUS_TEXTS, T_CENSUS, mo, model, tokenizer, torch):
     return census_sink, census_stats
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    get_census_eps, set_census_eps = mo.state(0.30)
+
+    def census_eps_slider(label="Census sink threshold ε"):
+        return mo.ui.slider(0.1, 0.9, step=0.05, value=get_census_eps(),
+                            on_change=set_census_eps, label=label, show_value=True)
+    return census_eps_slider, get_census_eps, set_census_eps
+
+
 @app.cell
-def _(CENSUS_DOMAINS, mo):
-    census_eps = mo.ui.slider(0.1, 0.9, step=0.05, value=0.30,
-                              label="Census sink threshold ε", show_value=True)
+def _(CENSUS_DOMAINS, census_eps_slider, mo):
     census_domains_sel = mo.ui.multiselect(
         options=CENSUS_DOMAINS, value=CENSUS_DOMAINS,
         label="Domains to include (deselect some and see if the sink map cares)",
     )
-    mo.vstack([census_eps, census_domains_sel])
-    return census_domains_sel, census_eps
+    mo.vstack([census_eps_slider(), census_domains_sel])
+    return (census_domains_sel,)
 
 
 @app.cell
-def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_eps, census_sink, census_stats, mo, pl):
+def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_sink, census_stats, get_census_eps, mo, pl):
     _sel_idx = [i for i, d in enumerate(CENSUS_DOMAINS) if d in census_domains_sel.value]
-    _eps_c = census_eps.value
+    _eps_c = get_census_eps()
     if not _sel_idx:
         _view_c = mo.md("⚠ Select at least one domain above.")
     else:
@@ -1547,52 +1550,61 @@ def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_eps, ce
     return
 
 
-# ── The Modern-Model Test: Qwen2.5 ladder (0.5B → 14B) ────────────────────────
+# ── The Modern-Model Test: Qwen ladders (0.5B → 14B) ──────────────────────────
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### The Modern-Model Test: Does 2024 Sink Harder Than 2019?
+    ### The Modern-Model Test: Do Newer LLMs Sink Harder?
 
-    Every live measurement so far used GPT-2 — a 2019 model trained on a **1,024-token**
+    Every live measurement so far used GPT-2, a 2019 model trained on a **1,024-token**
     context. The paper's Prediction 1 (§4.1) says training context length drives sink
-    formation, but the paper could only test it on 120M-parameter models it trained itself.
+    formation, but the paper tests it only on 120M-parameter models trained in-house.
 
-    The GPU we're running on can test it on real frontier-grade models. **Qwen2.5**
-    (2024, ungated) is pre-trained with long-context stages up to **32K tokens** — 32× GPT-2's
-    window — and ships in sizes from 0.5B to 14B. If the paper is right, these models should
-    sink far harder than GPT-2 at the same ε, and harder as they grow (Prediction 2).
+    Two ungated model families let us test it at real scale. **Qwen2.5** (2024) pre-trains
+    with long-context stages up to **32K tokens**, 32× GPT-2's window; **Qwen3** (2025)
+    extends that recipe. Both ship in sizes from 0.5B to 14B. If the paper is right, these
+    models should sink harder than GPT-2 at the same ε (Prediction 1), and harder as they
+    grow (Prediction 2).
 
     Each run executes the **same 24-domain census** as above on the model you pick, so the
-    numbers are directly comparable, and adds a bar to your personal Table 1 below. One note
-    from §5: Qwen2.5 has no ⟨BOS⟩ pinned during training, so the paper predicts its sink
-    forms on **whatever token comes first** — we measure attention to position 0, exactly as
-    the paper's sink metric does.
+    numbers are directly comparable, and adds a bar to the comparison chart below. One note
+    from §5: Qwen pins no ⟨BOS⟩ during training, so the paper predicts its sink forms on
+    **whatever token comes first**; we measure attention to position 0, exactly as the
+    paper's sink metric does.
 
     *VRAM guide (bf16): 0.5B ≈ 1 GB · 1.5B ≈ 3 GB · 3B ≈ 6 GB · 7B ≈ 15 GB · 14B ≈ 28 GB.
-    Models stay resident after loading — on a 96 GB card you can hold the whole ladder plus
-    all four GPT-2s and still have room.*
+    One family stays loaded at a time; picking a model from the other family frees the
+    previous one first.*
     """)
     return
 
 
 @app.cell
-def _(mo):
+def _(census_eps_slider, mo):
     qwen_ladder_state = mo.state([])
     get_qwen_ladder, set_qwen_ladder = qwen_ladder_state
     qwen_pick = mo.ui.dropdown(
         options={
-            "Qwen2.5-0.5B (24L × 14H)": "Qwen/Qwen2.5-0.5B",
-            "Qwen2.5-1.5B (28L × 12H)": "Qwen/Qwen2.5-1.5B",
-            "Qwen2.5-3B (36L × 16H)": "Qwen/Qwen2.5-3B",
-            "Qwen2.5-7B (28L × 28H)": "Qwen/Qwen2.5-7B",
-            "Qwen2.5-14B (48L × 40H)": "Qwen/Qwen2.5-14B",
+            "Qwen2.5-0.5B (2024)": "Qwen/Qwen2.5-0.5B",
+            "Qwen2.5-1.5B (2024)": "Qwen/Qwen2.5-1.5B",
+            "Qwen2.5-3B (2024)": "Qwen/Qwen2.5-3B",
+            "Qwen2.5-7B (2024)": "Qwen/Qwen2.5-7B",
+            "Qwen2.5-14B (2024)": "Qwen/Qwen2.5-14B",
+            "Qwen3-0.6B (2025)": "Qwen/Qwen3-0.6B",
+            "Qwen3-1.7B (2025)": "Qwen/Qwen3-1.7B",
+            "Qwen3-4B (2025)": "Qwen/Qwen3-4B",
+            "Qwen3-8B (2025)": "Qwen/Qwen3-8B",
+            "Qwen3-14B (2025)": "Qwen/Qwen3-14B",
         },
-        value="Qwen2.5-0.5B (24L × 14H)",
+        value="Qwen2.5-0.5B (2024)",
         label="Modern model to census",
     )
     qwen_go = mo.ui.run_button(label="⚡ Load & run the 24-domain census")
-    mo.hstack([qwen_pick, qwen_go], justify="start", gap=1)
+    mo.vstack([
+        mo.hstack([qwen_pick, qwen_go], justify="start", gap=1),
+        census_eps_slider("Sink threshold ε (shared with the census above)"),
+    ])
     return get_qwen_ladder, qwen_go, qwen_pick, set_qwen_ladder
 
 
@@ -1600,9 +1612,8 @@ def _(mo):
 def _(AutoModelForCausalLM, AutoTokenizer, CENSUS_TEXTS, MODEL_CACHE, T_CENSUS, device, mo, qwen_go, qwen_pick, set_qwen_ladder, torch):
     mo.stop(
         not qwen_go.value,
-        mo.md("*Pick a size and press **⚡ Load & run** — first run downloads the model, "
-              "then it stays resident in VRAM. Nothing here runs at notebook startup, so "
-              "the boot stays fast.*"),
+        mo.md("*Pick a size and press **⚡ Load & run**. The first run of each model "
+              "downloads its weights.*"),
     )
     import time as _t_q
     _qid = qwen_pick.value
@@ -1610,6 +1621,14 @@ def _(AutoModelForCausalLM, AutoTokenizer, CENSUS_TEXTS, MODEL_CACHE, T_CENSUS, 
         _t0_q = _t_q.perf_counter()
         if device == "cuda":
             torch.cuda.reset_peak_memory_stats()
+        # One Qwen family resident at a time: evict the other family before loading.
+        _fam_q = "Qwen/Qwen3" if _qid.startswith("Qwen/Qwen3") else "Qwen/Qwen2.5"
+        _evict_q = [k for k in MODEL_CACHE
+                    if k.startswith("Qwen/") and not k.startswith(_fam_q)]
+        for _k_q in _evict_q:
+            del MODEL_CACHE[_k_q]
+        if _evict_q and device == "cuda":
+            torch.cuda.empty_cache()
         _tok_key = _qid + ":tokenizer"
         if _tok_key not in MODEL_CACHE:
             MODEL_CACHE[_tok_key] = AutoTokenizer.from_pretrained(_qid)
@@ -1622,8 +1641,8 @@ def _(AutoModelForCausalLM, AutoTokenizer, CENSUS_TEXTS, MODEL_CACHE, T_CENSUS, 
         _mdl_q = MODEL_CACHE[_qid]
         _load_s = _t_q.perf_counter() - _t0_q
 
-        # Same 24 prompts, same T=64 truncation as the GPT-2 census. Qwen2.5 pins no
-        # BOS, so nothing is prepended (Table 2's "text" inference row) — the sink
+        # Same 24 prompts, same T=64 truncation as the GPT-2 census. Qwen pins no
+        # BOS, so nothing is prepended (Table 2's "text" inference row); the sink
         # metric targets position 0 whatever token sits there, per Gu et al.
         _pad_q = _tok_q.pad_token_id if _tok_q.pad_token_id is not None else (_tok_q.eos_token_id or 0)
         _seqs_q = [_tok_q.encode(t, add_special_tokens=False)[:T_CENSUS] for t in CENSUS_TEXTS]
@@ -1650,9 +1669,8 @@ def _(AutoModelForCausalLM, AutoTokenizer, CENSUS_TEXTS, MODEL_CACHE, T_CENSUS, 
             "rate08": float((_mean_q > 0.8).float().mean().item()) * 100,
             "heads": _nl_q * _nh_q,
         }
-        # Accumulate into the ladder, replacing any previous run of the same model.
-        # NB: functional update — reading the getter here would make this cell re-run
-        # on its own write (run_button already back to False → mo.stop would eat the result).
+        # Functional update: replaces any previous run of the same model without
+        # reading the getter (which would re-trigger this cell on its own write).
         set_qwen_ladder(
             lambda prev, _n=_entry_q: [e for e in prev if e["model"] != _n["model"]] + [_n])
         del _out_q, _A_q, _sink_q
@@ -1664,25 +1682,22 @@ def _(AutoModelForCausalLM, AutoTokenizer, CENSUS_TEXTS, MODEL_CACHE, T_CENSUS, 
         _result_q = mo.md(
             f"**{_entry_q['model']}** ({_nl_q}L × {_nh_q}H = {_entry_q['heads']} heads): "
             f"**{_entry_q['rate03']:.0f}%** of heads sink at ε=0.3, **{_entry_q['rate08']:.0f}%** "
-            f"at the paper's strict ε=0.8 bar — measured over the same 24 domains as the GPT-2 "
+            f"at the paper's strict ε=0.8 bar, measured over the same 24 domains as the GPT-2 "
             f"census above. Load: {_load_s:.1f}s · census: {_fwd_s:.2f}s for {_ntok_q} tokens "
-            f"({_ntok_q/_fwd_s:,.0f} tok/s){_gpu_q}. The comparison chart below updates with "
-            "every model you run.")
+            f"({_ntok_q/_fwd_s:,.0f} tok/s){_gpu_q}. The chart below adds a bar for each "
+            "model you run.")
     except Exception as _e_q:
         _result_q = mo.md(
             f"⚠ Could not run `{_qid}`: `{type(_e_q).__name__}: {_e_q}`. "
-            "Most likely a download interruption or out-of-memory on this device — try a "
-            "smaller size; the rest of the notebook is unaffected.")
+            "A download interruption or out-of-memory are the usual causes; try a smaller size.")
     _result_q
     return
 
 
 @app.cell
-def _(alt, census_sink, census_eps, get_qwen_ladder, MODEL_ID, mo, pl):
-    # "Build your own Table 1": every censused model on one axis, alongside the
-    # paper's published LLaMA 3.1 numbers. Re-renders whenever a Qwen run finishes
-    # (mo.state) or the GPT-2 census changes (model picker / ε slider above).
-    _eps_l = census_eps.value
+def _(alt, census_sink, get_census_eps, get_qwen_ladder, MODEL_ID, mo, pl):
+    # Every censused model on one axis, next to the paper's published LLaMA 3.1 numbers.
+    _eps_l = get_census_eps()
     _gpt_rate = float((census_sink.mean(dim=1) > _eps_l).float().mean().item()) * 100
     _rows_l = [{"model": f"{MODEL_ID} (live, ε={_eps_l:.2f})", "rate": _gpt_rate,
                 "source": "measured here"}]
@@ -1714,21 +1729,22 @@ def _(alt, census_sink, census_eps, get_qwen_ladder, MODEL_ID, mo, pl):
         )
         .properties(width=460, height=26 * len(_rows_l) + 30,
             title=alt.TitleParams(
-                text="Your Table 1 — live measurements vs the paper's published numbers",
+                text="Your Table 1: live measurements vs the paper's published numbers",
                 color="#e2e8f0", fontSize=12))
         .configure_view(stroke="#1e2d47", fill="#0d1220")
         .configure(background="#07080f")
     )
     _note_l = (
-        "Run several Qwen sizes above and the ladder fills in. Two paper predictions are "
-        "checkable at once: modern long-context models should out-sink GPT-2 at equal ε "
-        "(Prediction 1: training context), and bigger Qwen models should out-sink smaller "
-        "ones (Prediction 2: scale). Note the live ε tracks the census slider — set it to "
-        "0.8 to compare against the paper's LLaMA numbers on equal terms."
+        "Amber bars are measured here (GPT-2 and the Qwen models you ran); purple bars are "
+        "the LLaMA 3.1 sink rates the paper reports in Table 1 at ε=0.8. Two predictions are "
+        "checkable at once: the Qwen bars should sit above GPT-2 at equal ε, since Qwen "
+        "trains on 32× longer context (Prediction 1), and bigger Qwen sizes should out-sink "
+        "smaller ones (Prediction 2). The live bars track the ε slider above; set it to 0.8 "
+        "to compare with the LLaMA numbers on equal terms."
         if get_qwen_ladder() else
-        "No modern models censused yet — the chart shows the current GPT-2 model against "
-        "the paper's published LLaMA numbers. Run a Qwen size above to start filling in "
-        "your own Table 1."
+        "Amber is the current GPT-2 model, measured here; purple bars are the LLaMA 3.1 "
+        "sink rates the paper reports in Table 1 at ε=0.8. Run a Qwen size above to add "
+        "modern models to the comparison."
     )
     mo.vstack([_ch_l, mo.md(_note_l)], align="center")
     return
@@ -1996,6 +2012,8 @@ def _(mo):
     ## Head Explorer
 
     **Click any cell** in the grid below to inspect that head's full T × T attention matrix.
+    **Shift-click** adds more heads; each selected head gets its own matrix, side by side,
+    so you can compare a sink head against a working head directly.
     Every cell is one attention head of the model you picked above (rows = layers, columns = heads).
     Amber = strong sink. Dark = distributed attention.
 
@@ -2014,11 +2032,7 @@ def _(model_picker):
 
 @app.cell
 def _(N_HEADS, N_LAYERS, alt, mo, pl, sink_scores_live, tokens_live):
-    # Native altair grid with marimo point-selection — replaces the old anywidget grid.
-    # anywidget was the wrong tool here: this cell re-runs on every model/text change,
-    # and each new widget instance re-registered its JS module as a fresh virtual file;
-    # on molab the frontend then imported a dead URL ("not a valid anywidget").
-    # mo.ui.altair_chart selection is pure vega state — nothing to serve, nothing to break.
+    # Native altair grid; selection state comes back through mo.ui.altair_chart.
     import html as _html_g
     _rows_g = [
         {"layer": f"L{l:02d}", "head": f"H{h:02d}", "li": l, "hi": h,
@@ -2046,7 +2060,7 @@ def _(N_HEADS, N_LAYERS, alt, mo, pl, sink_scores_live, tokens_live):
         .properties(
             width=_cw_g * N_HEADS, height=_ch_g * N_LAYERS,
             title=alt.TitleParams(
-                text=f"Click a head to drill in — {N_LAYERS}×{N_HEADS} grid, live on your text",
+                text=f"Click a head to drill in, shift-click to compare ({N_LAYERS}×{N_HEADS} grid, live on your text)",
                 color="#e2e8f0", fontSize=12),
         )
         .configure_view(stroke="#1e2d47", fill="#0d1220")
@@ -2069,7 +2083,7 @@ def _(N_HEADS, N_LAYERS, alt, mo, pl, sink_scores_live, tokens_live):
 
 
 @app.cell
-def _(alt, attn_live, mo, pl, sink_grid, tokens_live):
+def _(attn_live, sink_grid):
     _sel_g = sink_grid.value
     try:
         _sel_rows_g = _sel_g.to_dicts()          # polars
@@ -2078,49 +2092,67 @@ def _(alt, attn_live, mo, pl, sink_grid, tokens_live):
             _sel_rows_g = _sel_g.to_dict("records")   # pandas fallback
         except Exception:
             _sel_rows_g = []
-    _sl = int(_sel_rows_g[0]["li"]) if _sel_rows_g else -1
-    _sh = int(_sel_rows_g[0]["hi"]) if _sel_rows_g else -1
-    # Guard against a stale selection surviving a model switch (grid size changed).
-    if not (0 <= _sl < attn_live.shape[0] and 0 <= _sh < attn_live.shape[1]):
-        _drill = mo.md("*Click any cell in the grid above to inspect that head's full attention matrix.*")
+    selected_heads = []
+    for _r_g in _sel_rows_g:
+        _p_g = (int(_r_g["li"]), int(_r_g["hi"]))
+        # Drop duplicates and stale selections surviving a model switch.
+        if (0 <= _p_g[0] < attn_live.shape[0] and 0 <= _p_g[1] < attn_live.shape[1]
+                and _p_g not in selected_heads):
+            selected_heads.append(_p_g)
+    return (selected_heads,)
+
+
+@app.cell
+def _(alt, attn_live, mo, pl, selected_heads, tokens_live):
+    if not selected_heads:
+        _drill = mo.md("*Click any cell in the grid above to inspect that head's attention "
+                       "matrix. Shift-click to compare several side by side.*")
     else:
-        _T2   = len(tokens_live)
-        _mat2 = attn_live[_sl, _sh].cpu().numpy()
-        _rows3 = [
-            {"qi": i, "ki": j,
-             "q": tokens_live[i].strip() or f"[{i}]",
-             "k": tokens_live[j].strip() or f"[{j}]",
-             "w": float(_mat2[i, j])}
-            for i in range(_T2) for j in range(i + 1)
-        ]
-        _sc3 = float(attn_live[_sl, _sh, :, 0].mean().item())
-        _lbl3 = "SINK" if _sc3 > 0.3 else "NORMAL"
-        _col3 = "#f59e0b" if _sc3 > 0.3 else "#7dd3fc"
-        _ch3  = (
-            alt.Chart(pl.DataFrame(_rows3))
-            .mark_rect()
-            .encode(
-                x=alt.X("ki:O", title="Key position",
-                         axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8", labelFontSize=9)),
-                y=alt.Y("qi:O", title="Query position", sort="descending",
-                         axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8", labelFontSize=9)),
-                color=alt.Color("w:Q",
-                    scale=alt.Scale(scheme="inferno"),
-                    legend=alt.Legend(title="Weight", labelColor="#94a3b8", titleColor="#94a3b8")),
-                tooltip=[alt.Tooltip("q:N", title="Query"), alt.Tooltip("k:N", title="Key"),
-                         alt.Tooltip("w:Q", title="Weight", format=".4f")],
+        _show = selected_heads[:3]
+        _T2 = len(tokens_live)
+        _w3 = 420 if len(_show) == 1 else 300
+        _h3 = 300 if len(_show) == 1 else 240
+        _charts3 = []
+        for _k3, (_sl, _sh) in enumerate(_show):
+            _mat2 = attn_live[_sl, _sh].cpu().numpy()
+            _rows3 = [
+                {"qi": i, "ki": j,
+                 "q": tokens_live[i].strip() or f"[{i}]",
+                 "k": tokens_live[j].strip() or f"[{j}]",
+                 "w": float(_mat2[i, j])}
+                for i in range(_T2) for j in range(i + 1)
+            ]
+            _sc3 = float(attn_live[_sl, _sh, :, 0].mean().item())
+            _lbl3 = "SINK" if _sc3 > 0.3 else "NORMAL"
+            _charts3.append(
+                alt.Chart(pl.DataFrame(_rows3))
+                .mark_rect()
+                .encode(
+                    x=alt.X("ki:O", title="Key position",
+                             axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8", labelFontSize=8)),
+                    y=alt.Y("qi:O", title="Query position", sort="descending",
+                             axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8", labelFontSize=8)),
+                    color=alt.Color("w:Q",
+                        scale=alt.Scale(scheme="inferno", domain=[0, 1]),
+                        legend=(alt.Legend(title="Weight", labelColor="#94a3b8",
+                                           titleColor="#94a3b8")
+                                if _k3 == len(_show) - 1 else None)),
+                    tooltip=[alt.Tooltip("q:N", title="Query"), alt.Tooltip("k:N", title="Key"),
+                             alt.Tooltip("w:Q", title="Weight", format=".4f")],
+                )
+                .properties(width=_w3, height=_h3,
+                    title=alt.TitleParams(
+                        text=f"L{_sl}·H{_sh} · sink {_sc3:.3f} [{_lbl3}]",
+                        color="#f59e0b" if _sc3 > 0.3 else "#7dd3fc", fontSize=12))
             )
-            .properties(width=420, height=300,
-                title=alt.TitleParams(
-                    text=f"Layer {_sl}, Head {_sh}  ·  BOS sink score: {_sc3:.3f}  [{_lbl3}]",
-                    color="#e2e8f0", fontSize=13))
+        _combo3 = (
+            alt.hconcat(*_charts3, spacing=18)
             .configure_view(stroke="#1e2d47", fill="#0d1220")
             .configure(background="#07080f")
         )
-        _drill = mo.vstack([
-            mo.Html(f'<p style="font-family:Space Grotesk;font-size:13px;color:{_col3};margin:4px 0 8px;max-width:640px;margin-left:auto;margin-right:auto">▶ Layer {_sl}, Head {_sh}: {_lbl3} (sink score = {_sc3:.3f})</p>'),
-            _ch3,
-        ], align="center")
+        _more3 = (mo.md(f"*Showing the first 3 of {len(selected_heads)} selected heads.*")
+                  if len(selected_heads) > 3 else None)
+        _drill = mo.vstack([_combo3] + ([_more3] if _more3 else []), align="center")
     _drill
     return
 
@@ -2136,17 +2168,18 @@ def _(mo):
     Sink heads concentrate weight on one position → low entropy. Active heads spread weight
     across many positions → high entropy.
 
-    Each point below is one attention head of the model you picked above.
-    The two clusters are the empirical signature of a discrete mechanism.
+    Each point below is one attention head of the current lab model, computed on your text.
+    Heads you selected in the explorer above appear ringed in white, so you can see where a
+    head you inspected sits in the two clusters. The clusters themselves are the empirical
+    signature of a discrete mechanism.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(alt, attn_live, mo, pl):
-    # Entropy fully on-device: causal rows are exact zeros above the diagonal, and
-    # 0·log(0+ε) = 0, so per-query entropy is one fused tensor expression — no
-    # Python-loop-over-tokens on the CPU (the old version iterated T times in numpy).
+def _(alt, attn_live, mo, pl, selected_heads):
+    # Per-query entropy as one fused tensor expression on-device; the causal zeros
+    # above the diagonal contribute 0·log(0+ε) = 0, so no masking is needed.
     _Le, _He, _Te, _ = attn_live.shape
     _ent_t = -(attn_live * (attn_live + 1e-12).log()).sum(-1).mean(dim=2)  # [L, H]
     _bos_t = attn_live[:, :, :, 0].mean(dim=2)                             # [L, H]
@@ -2157,13 +2190,14 @@ def _(alt, attn_live, mo, pl):
         {"label": f"L{l}·H{h}", "layer": l, "head": h,
          "entropy": float(_ent_e[l, h]),
          "bos_pct": float(_bos_e[l, h]) * 100,
-         "type": "Sink (BOS > 30%)" if _bos_e[l, h] > 0.3 else "Normal"}
+         "type": "Sink (BOS > 30%)" if _bos_e[l, h] > 0.3 else "Normal",
+         "picked": (l, h) in selected_heads}
         for l in range(_Le) for h in range(_He)
     ]
     _df_e = pl.DataFrame(_rows_e)
     _n_sink_e = _df_e.filter(pl.col("bos_pct") > 30).height
 
-    _sc_e = (
+    _base_e = (
         alt.Chart(_df_e)
         .mark_circle(size=75, opacity=0.85, stroke="#07080f", strokeWidth=0.5)
         .encode(
@@ -2182,6 +2216,15 @@ def _(alt, attn_live, mo, pl):
                 alt.Tooltip("type:N"),
             ],
         )
+    )
+    _ring_e = (
+        alt.Chart(_df_e.filter(pl.col("picked")))
+        .mark_point(size=260, filled=False, color="#f8fafc", strokeWidth=2)
+        .encode(x="entropy:Q", y="bos_pct:Q",
+                tooltip=[alt.Tooltip("label:N", title="Selected head")])
+    )
+    _sc_e = (
+        (_base_e + _ring_e)
         .properties(
             width=440, height=280,
             title=alt.TitleParams(
@@ -2190,11 +2233,19 @@ def _(alt, attn_live, mo, pl):
         .configure_view(stroke="#1e2d47", fill="#0d1220")
         .configure(background="#07080f")
     )
+    _picked_e = _df_e.filter(pl.col("picked"))
+    _pick_note = (
+        " Ringed: " + ", ".join(
+            f"**{r['label']}** ({r['entropy']:.2f} nats, {r['bos_pct']:.0f}% BOS)"
+            for r in _picked_e.iter_rows(named=True)) + "."
+        if _picked_e.height else ""
+    )
     mo.vstack([
         _sc_e,
         mo.md(f"**{_n_sink_e}/{_Le * _He} heads** cluster at low entropy + high BOS attention. "
               "The gap between clusters is wider than a continuous tendency would produce: "
-              "each head either operates as a sink or it doesn't, no interpolation between the two."),
+              "each head either operates as a sink or it doesn't, no interpolation between "
+              f"the two.{_pick_note}"),
     ], align="center")
     return
 
@@ -2772,8 +2823,7 @@ def _(BOS_ID, alt, len_slider, mo, model, pl, tokenizer, torch):
 
 @app.cell(hide_code=True)
 def _(MODEL_CACHE, MODEL_ID, device, mo, torch):
-    # Depends on MODEL_ID so it refreshes whenever the picker loads a new model.
-    _ = MODEL_ID
+    _ = MODEL_ID   # refresh this card on model change
     if device == "cuda":
         _name_g = torch.cuda.get_device_name(0)
         _total_g = torch.cuda.get_device_properties(0).total_memory / 1e9
@@ -2787,18 +2837,16 @@ def _(MODEL_CACHE, MODEL_ID, device, mo, torch):
     **GPU:** {_name_g} ({_total_g:.0f} GB) · **{_res_g:.1f} GB resident** ·
     models cached: {', '.join(f'`{m}`' for m in _models_g)}
 
-    Every experiment above ran as **padded, masked, batched forward passes** under
-    `torch.no_grad()` — the census (24 prompts, 1 pass), Figure 2 (6 sequences, 2 passes),
+    Every experiment above runs as padded, masked, batched forward passes under
+    `torch.no_grad()`: the census (24 prompts, 1 pass), Figure 2 (6 sequences, 2 passes),
     the collapse scan (up to 20 sequences, 1 pass through the transformer body, LM head
     skipped), sink placement (5 strategies, 1 pass). Entropy and sink metrics are fused
-    tensor ops on-device; nothing loops over tokens in Python. Models load once and stay
-    resident, so every reactive re-run you trigger costs only its forward pass.
+    tensor ops on-device.
     """)
     else:
         _card = mo.md(
-            "---\n#### ⚙️ Under the hood\n\nRunning on **CPU** — all experiments still work "
-            "(batched exactly the same way), just slower. On a GPU runtime the models stay "
-            "resident in VRAM and every interaction re-runs in seconds.")
+            "---\n#### ⚙️ Under the hood\n\nRunning on **CPU**. The experiments are batched "
+            "the same way as on GPU, just slower.")
     _card
     return
 
