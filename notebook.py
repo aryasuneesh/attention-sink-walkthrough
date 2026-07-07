@@ -18,7 +18,7 @@ import marimo
 __generated_with = "0.23.11"
 app = marimo.App(
     width="full",
-    app_title="Attention Sinks — Why LLMs Attend to the First Token",
+    app_title="Attention Sinks: Why LLMs Attend to the First Token",
 )
 
 
@@ -36,11 +36,12 @@ def _(mo):
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
       /*
-        Page uses marimo's / molab's DEFAULT background and text theme — no forced
-        canvas colour. We only brand the fonts (applied globally via marimo's
-        --marimo-*-font variables) and centre the reading column, since the app is
-        width="full". Charts and widgets keep their own dark backgrounds by design;
-        everything else follows the host theme so it renders correctly on molab.
+        Page follows marimo's and molab's default background and text theme; we
+        do not force a canvas colour. We brand only the fonts (applied globally
+        via marimo's --marimo-*-font variables) and centre the reading column,
+        since the app uses width="full". Charts and widgets keep their own dark
+        backgrounds by design; everything else follows the host theme so it
+        renders correctly on molab.
       */
       :root {
         --marimo-text-font:      'Inter', system-ui, sans-serif;
@@ -119,10 +120,6 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(anywidget, mo):
-    # mo.Html (and mo.iframe, which depends on the notebook server's virtual-file
-    # serving) proved unreliable for embedded <script> widgets across hosting
-    # contexts. anywidget runs its JS directly in the cell's own DOM node, which
-    # is the same mechanism the Head Explorer widget below already relies on.
     class TokenQuizWidget(anywidget.AnyWidget):
         _esm = r"""
         function render({ el }) {
@@ -132,7 +129,7 @@ def _(anywidget, mo):
             <div style="margin-bottom:1.4em">
               <p style="color:#cbd5e1;font-size:1.05em;line-height:1.65;margin:0 0 0.5em">
                 A language model reading the sentence below just processed every word.
-                Then it spent most of its attention budget on a single token — one that
+                Then it spent most of its attention budget on a single token that
                 carries no semantic content at all.
               </p>
               <p style="color:#94a3b8;font-size:0.9em;margin:0">
@@ -229,7 +226,7 @@ def _(anywidget, mo):
             });
 
             if (chosen === 0) {
-              verdict.innerHTML = '<span style="color:#4ade80;font-weight:700">Correct!</span> &lt;BOS&gt; absorbed <strong>74%</strong> of attention — the model was barely looking at your words at all.';
+              verdict.innerHTML = '<span style="color:#4ade80;font-weight:700">Correct!</span> &lt;BOS&gt; absorbed <strong>74%</strong> of attention. The model barely looked at your words.';
             } else {
               verdict.innerHTML = '<span style="color:#f87171;font-weight:700">Incorrect.</span> &ldquo;' + RAW[chosen] + '&rdquo; got only <strong>' + (ATTN[chosen]*100).toFixed(0) + '%</strong>. <strong style="color:#f59e0b">&lt;BOS&gt; took 74%.</strong> The model spent most of its attention on a positional placeholder.';
             }
@@ -285,19 +282,17 @@ def _(mo):
 | | |
 |---|---|
 | **Who** | Federico Barbero, Álvaro Arroyo (Oxford), Xiangming Gu (NUS), and Google DeepMind researchers including Petar Veličković and Razvan Pascanu. |
-| **What** | Large language models dump a huge share of their attention onto the *first token* of the input — a meaningless marker like `<BOS>`. In LLaMA 3.1 405B, **~80% of attention heads** do this. The paper asks: *why would gradient descent learn something so apparently wasteful?* |
-| **When / Where** | Published at COLM 2025 ([arXiv:2504.02732](https://arxiv.org/abs/2504.02732)). Evidence from Gemma 7B, the LLaMA 3.1 family (8B → 405B), and 120M-parameter models the authors trained from scratch. |
-| **Why it matters** | Attention sinks affect things practitioners fight with daily: model **quantization** breaks around them, **streaming/long-context** inference must preserve them, and they've been tied to **security** quirks. If you deploy or fine-tune LLMs, sinks are load-bearing walls — this paper explains *why* they exist. |
-| **How** | Theory: deep Transformers *over-mix* — token representations blur together (Theorem 3.2 bounds this). The sink is a learned pressure valve: attending to a near-zero-content token lets a head do *nothing* when nothing is needed. Experiments: perturb a word and watch the blast radius, scale models up, retrain with different data packing. |
+| **What** | Large language models dump a huge share of their attention onto the *first token* of the input, a meaningless marker like `<BOS>`. In LLaMA 3.1 405B, **~80% of attention heads** do this. The paper asks why gradient descent would learn something so wasteful. |
+| **When / Where** | Published at COLM 2025 ([arXiv:2504.02732](https://arxiv.org/abs/2504.02732)). Evidence from Gemma 7B, the LLaMA 3.1 family (8B to 405B), and 120M-parameter models the authors trained from scratch. |
+| **Why it matters** | Attention sinks affect problems practitioners handle daily: model **quantization** breaks around them, **streaming and long-context** inference must preserve them, and they've been tied to **security** quirks. If you deploy or fine-tune LLMs, sinks are load-bearing walls. This paper explains why they exist. |
+| **How** | Theory: deep Transformers *over-mix*, and token representations blur together (Theorem 3.2 bounds this). The sink acts as a learned pressure valve: attending to a near-zero-content token lets a head do *nothing* when nothing is needed. Experiments: perturb a word and watch the blast radius, scale models up, retrain with different data packing. |
 
-**How to drive this notebook** — every chart below is live, not a screenshot:
+**How this notebook works:**
 
-1. **🔬 Model picker** (below): flips every experiment between four GPT-2 sizes.
-2. **Text boxes**: most experiments re-run on *your* words the moment you type.
-3. **Sliders** (ε thresholds, context lengths, sink spacing): drag and watch findings recompute.
-4. **Click things**: the head-explorer grid drills into any of the model's attention heads.
-
-*No cell hides hardcoded results — if you can change an input, the numbers you see were computed on it.*
+1. **🔬 Model picker**: switch between GPT-2 Small (124M, 12 layers) and XL (1.5B, 48 layers) to test the paper's Prediction 2, that deeper models sink harder.
+2. **Text boxes**: type a sentence and see which tokens the model actually attends to.
+3. **Sliders** (ε thresholds, context length, sink spacing): each one is a variable the paper's theory makes a claim about.
+4. **Click cells** in the head-explorer grid to inspect one attention head's full attention matrix.
         """),
     })
     return
@@ -327,41 +322,48 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    # Persistent across model switches: loaded models stay resident (GPU has the VRAM),
-    # so flipping the picker back to a previous model is instant. This cell has no
-    # dependencies, so marimo runs it exactly once.
     MODEL_CACHE = {}
     return (MODEL_CACHE,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    model_pick = mo.ui.dropdown(
-        options={
-            "GPT-2 Small (124M · 12L × 12H)": "gpt2",
-            "GPT-2 Medium (345M · 24L × 16H)": "gpt2-medium",
-            "GPT-2 Large (774M · 36L × 20H)": "gpt2-large",
-            "GPT-2 XL (1.5B · 48L × 25H)": "gpt2-xl",
-        },
-        value="GPT-2 Small (124M · 12L × 12H)",
-        label="🔬 Lab model — every live experiment below re-runs on the model you pick",
-    )
+    MODEL_OPTIONS = {
+        "GPT-2 Small (124M · 12L × 12H)": "gpt2",
+        "GPT-2 Medium (345M · 24L × 16H)": "gpt2-medium",
+        "GPT-2 Large (774M · 36L × 20H)": "gpt2-large",
+        "GPT-2 XL (1.5B · 48L × 25H)": "gpt2-xl",
+    }
+    MODEL_LABELS = {v: k for k, v in MODEL_OPTIONS.items()}
+    get_model_id, set_model_id = mo.state("gpt2")
+
+    def model_picker(label="🔬 Model"):
+        return mo.ui.dropdown(
+            options=MODEL_OPTIONS,
+            value=MODEL_LABELS[get_model_id()],
+            on_change=set_model_id,
+            label=label,
+        )
+    return MODEL_LABELS, MODEL_OPTIONS, get_model_id, model_picker, set_model_id
+
+
+@app.cell(hide_code=True)
+def _(mo, model_picker):
+    model_pick = model_picker("🔬 Lab model (GPT-2 Small → XL)")
     mo.vstack([
         model_pick,
         mo.md(
-            "*This one dropdown drives the entire notebook: the sink heatmap, the Figure-2 "
-            "perturbation, the census, the value-norm check, the head explorer — all of it "
-            "recomputes reactively on the model you choose. Start Small for speed, then switch "
-            "to XL and watch the sink rate climb with depth (the paper's Prediction 2, live). "
-            "Models stay cached after first load, so switching back is instant.*"),
+            "*Switch to GPT-2 XL and watch the sink rate climb with depth: live evidence "
+            "for the paper's Prediction 2, that larger models sink harder. Every experiment "
+            "below reruns on whichever model you pick.*"),
     ])
     return (model_pick,)
 
 
 @app.cell(hide_code=True)
-def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, device, mo, model_pick, torch):
+def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, device, get_model_id, mo, torch):
     import time as _t_load
-    MODEL_ID = model_pick.value
+    MODEL_ID = get_model_id()
     _tok = AutoTokenizer.from_pretrained("gpt2")   # same tokenizer across the family
     _tok.pad_token = _tok.eos_token
 
@@ -390,8 +392,8 @@ def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, device, mo, model_pick, 
     **Device:** `{device}` {'(GPU active ✓)' if device == 'cuda' else '(CPU mode)'}{_vram}
     **BOS token:** `<|endoftext|>` id={BOS_ID}
 
-    *The paper's own headline numbers come from LLaMA 3.1 405B — 16,128 heads. The GPT-2 family
-    gives you the same phenomenon at four depths you can actually flip between interactively.*
+    *The paper's own headline numbers come from LLaMA 3.1 405B, with 16,128 heads. The GPT-2
+    family gives you the same phenomenon at four depths you can flip between.*
     """)
     return BOS_ID, D_MODEL, MODEL_ID, N_HEADS, N_LAYERS, model, tokenizer
 
@@ -459,6 +461,11 @@ def _(N_HEADS, N_LAYERS, alt, eps_slider, mo, pl, sink_scores_live):
     _nsink = _df.filter(pl.col("sink") > _eps).height
     _rate  = _nsink / _df.height
 
+    # Cell size scales with grid dimensions instead of squeezing into a fixed box,
+    # so GPT-2 XL's 25x48 grid stays as readable as Small's 12x12 one.
+    _cell_w, _cell_h = 34, 20
+    _hmap_w = max(500, _cell_w * N_HEADS + 90)
+    _hmap_h = max(310, _cell_h * N_LAYERS + 60)
     _hmap = (
         alt.Chart(_df)
         .mark_rect(cornerRadius=2, stroke="#07080f", strokeWidth=1)
@@ -476,9 +483,9 @@ def _(N_HEADS, N_LAYERS, alt, eps_slider, mo, pl, sink_scores_live):
             ],
         )
         .properties(
-            width=500, height=310,
+            width=_hmap_w, height=_hmap_h,
             title=alt.TitleParams(
-                text=f"GPT-2 attention to BOS — {_rate:.1%} of heads qualify as sinks (ε={_eps:.2f})",
+                text=f"GPT-2 attention to BOS: {_rate:.1%} of heads qualify as sinks (ε={_eps:.2f})",
                 color="#e2e8f0", fontSize=13,
             ),
         )
@@ -512,7 +519,7 @@ def _(N_HEADS, N_LAYERS, alt, eps_slider, mo, pl, sink_scores_live):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ACT II: THE ROOT CAUSE — OVER-MIXING
+# ACT II: THE ROOT CAUSE OF OVER-MIXING
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.cell(hide_code=True)
@@ -531,10 +538,6 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(anywidget, mo):
-    # mo.Html (and mo.iframe, which depends on the notebook server's virtual-file
-    # serving) proved unreliable for embedded <script> widgets across hosting
-    # contexts. anywidget runs its JS directly in the cell's own DOM node, which
-    # is the same mechanism the Head Explorer widget below already relies on.
     class OverMixingWidget(anywidget.AnyWidget):
         _esm = r"""
         function render({ el }) {
@@ -587,7 +590,7 @@ def _(anywidget, mo):
           const TRAIL_LEN = 8;
 
           const INIT = [
-            {x: 90,  y: 170},   // BOS — left anchor
+            {x: 90,  y: 170},   // BOS, left anchor
             {x: 200, y: 80},    // The
             {x: 460, y: 70},    // cat
             {x: 530, y: 185},   // sat
@@ -801,20 +804,26 @@ def _(mo):
 
     The simulation above is a cartoon. The paper's actual evidence is **Figure 2**: perturb one
     word in a prompt, run the model twice, and map how far the disturbance spreads through
-    every layer and token — with and without the attention sink.
+    every layer and token, with and without the attention sink.
 
-    The paper could ablate the sink in Gemma 7B by deleting ⟨BOS⟩, because Gemma was trained
-    with a fixed ⟨BOS⟩ and is brittle without it. **GPT-2 refuses that ablation** — it was
+    The paper ablates the sink in Gemma 7B by deleting ⟨BOS⟩, because Gemma was trained
+    with a fixed ⟨BOS⟩ and is brittle without it. **GPT-2 refuses that ablation.** It was
     trained without a fixed BOS, and exactly as the paper's §5 packing experiments predict,
-    its sink simply re-forms on whatever token comes first (we measure this below). So we use
+    its sink re-forms on whatever token comes first (we measure this below). We use instead
     a *sharper* intervention the paper never runs: keep the sequence identical, but **mask
-    position 0 out of attention**, so no head can reach the sink at all.
+    position 0 out of attention**, so no head can reach the sink.
 
     The default is the paper's own Shakespeare paragraph (Appendix C.1) with its own edit,
-    **"greatest" → "best"** — but this is a playground: paste any text, pick any word in it,
-    and choose your replacement. Each heatmap cell is ‖h(original) − h(perturbed)‖₂ for one
-    token at one layer. All six sequences run as **two batched GPU forward passes**.
+    **"greatest" → "best"**, but this cell is a playground: paste any text, pick any word in
+    it, and choose your replacement. Each heatmap cell is ‖h(original) − h(perturbed)‖₂ for
+    one token at one layer. All six sequences run as **two batched GPU forward passes**.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
     return
 
 
@@ -827,7 +836,7 @@ def _(mo):
                       "consist of some 39 plays, 154 sonnets, and three long narrative poems.")
     pp_prompt = mo.ui.text_area(
         value=_SHAKE_DEFAULT, rows=4, full_width=True,
-        label="Prompt (the paper's Appendix C.1 text — or paste your own)",
+        label="Prompt (paper's Appendix C.1 text, or your own)",
     )
     pp_word = mo.ui.text(value="greatest", label="Word to perturb")
     pp_repl = mo.ui.text(value="best", label="Replace it with")
@@ -839,9 +848,9 @@ def _(mo):
 def _(BOS_ID, alt, mo, model, pl, pp_prompt, pp_repl, pp_word, tokenizer, torch):
     # Live reproduction of paper Figure 2 (§3.2). Two batched forwards:
     # [original, perturbed] with the sink attendable and with position 0 masked.
-    # The replacement must tokenize to the same count so positions align; invalid
-    # input falls back to the paper's default pair with a visible explanation —
-    # this cell must never error out on user input.
+    # The replacement must tokenize to the same count so positions align. Invalid
+    # input falls back to the paper's default pair with a visible explanation.
+    # This cell must never error on user input.
     import time as _t_p
     _SHAKE = ("William Shakespeare was an English playwright, poet and actor. "
               "He is widely regarded as the greatest writer in the English language and "
@@ -893,7 +902,7 @@ def _(BOS_ID, alt, mo, model, pl, pp_prompt, pp_repl, pp_word, tokenizer, torch)
         torch.cuda.reset_peak_memory_stats()
 
     # Forward 1 (batch of 4): [orig, pert] with the sink attendable, and the SAME
-    # sequences with position 0 masked out of attention (per-row attention_mask) —
+    # sequences with position 0 masked out of attention (per-row attention_mask):
     # the causal ablation. Forward 2 (batch of 2): bare text, to show the sink relocating.
     _b4 = torch.tensor([[BOS_ID] + _orig_p, [BOS_ID] + _pert_p,
                         [BOS_ID] + _orig_p, [BOS_ID] + _pert_p], device=model.device)
@@ -939,8 +948,8 @@ def _(BOS_ID, alt, mo, model, pl, pp_prompt, pp_repl, pp_word, tokenizer, torch)
 
     _chart_p = (
         alt.vconcat(
-            _heat(_d_no,  f"Sink MASKED (no head can reach position 0) — perturbation at token {_pidx} spreads"),
-            _heat(_d_bos, "Sink attendable — the no-op dampens the spread"),
+            _heat(_d_no,  f"Sink MASKED (no head can reach position 0): perturbation at token {_pidx} spreads"),
+            _heat(_d_bos, "Sink attendable: the no-op dampens the spread"),
         )
         .configure_view(stroke="#1e2d47", fill="#0d1220")
         .configure(background="#07080f")
@@ -955,35 +964,35 @@ def _(BOS_ID, alt, mo, model, pl, pp_prompt, pp_repl, pp_word, tokenizer, torch)
     if model.device.type == "cuda":
         _gpu_p = f" · peak VRAM {torch.cuda.max_memory_allocated()/1e9:.2f} GB"
     _claim_p = (
-        f"blocking the sink amplifies collateral spread **{_ratio_p:.1f}×** on this prompt. "
-        "This is the paper's Figure 2 mechanism, isolated causally: same tokens, same weights, "
-        "only the sink's reachability changed — and without it, a one-word edit rewrites every "
+        f"Blocking the sink amplifies collateral spread **{_ratio_p:.1f}×** on this prompt. "
+        "This isolates the paper's Figure 2 mechanism causally: same tokens, same weights, "
+        "only the sink's reachability changed. Without it, a one-word edit rewrites every "
         "downstream representation."
         if _ratio_p > 1.05 else
-        f"on this substitute the two conditions are close (ratio {_ratio_p:.2f}×) — the paper's "
-        "effect is a tendency, not a law; try another word."
+        f"On this substitute the two conditions stay close (ratio {_ratio_p:.2f}×). The paper's "
+        "effect is a tendency, not a law. Try another word."
     )
     mo.vstack(([mo.md(_warn_p)] if _warn_p else []) + [
         _chart_p,
         mo.md(
             f'Swapping "{_word_p}" → "{_repl_p}" (token {_pidx}) disturbs the '
             f"**downstream** final-layer states by **{_sp_bos:.1f}** on average with the sink "
-            f"attendable, vs **{_sp_no:.1f}** with position 0 masked — {_claim_p}"),
+            f"attendable, vs **{_sp_no:.1f}** with position 0 masked. {_claim_p}"),
         mo.md(
-            f"**And the §5 control:** simply *deleting* the first token doesn't work as an "
+            f"**The §5 control:** *deleting* the first token does not work as an "
             f"ablation here. With `<|endoftext|>` prepended, {_sink_score_eot:.0%} of all "
-            f"attention lands on position 0; strip it and **{_sink_score_bare:.0%}** still "
-            f'lands on position 0 — now the word "{tokenizer.decode([_orig_p[0]]).strip()}". '
+            f"attention lands on position 0. Strip it and **{_sink_score_bare:.0%}** still "
+            f'lands on position 0, now on the word "{tokenizer.decode([_orig_p[0]]).strip()}". '
             "GPT-2 was trained without a fixed BOS, and exactly as the paper's Table 2 "
             "predicts, its sink is **positional, not lexical**: it re-forms on whatever comes "
-            f"first. That is why the mask intervention above is the honest ablation. "
+            f"first. The mask intervention above is the honest ablation for this model. "
             f"({_dt_p:.2f}s, 6 sequences in 2 batched passes{_gpu_p}.)"),
     ], align="center")
     return
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ACT III: THE MATHEMATICS — THEOREM 3.2
+# ACT III: THE MATHEMATICS OF THEOREM 3.2
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.cell(hide_code=True)
@@ -1011,9 +1020,9 @@ def _(mo):
     thm_cmax = mo.ui.slider(1.0, 2.0, step=0.05, value=1.2,
                             label="Lipschitz constant C_max (≥1 in practice)", show_value=True)
     thm_alpha_no_sink = mo.ui.slider(0.05, 0.9, step=0.05, value=0.5,
-                                      label="Mean path weight ᾱ — no sink", show_value=True)
+                                      label="Mean path weight ᾱ, no sink", show_value=True)
     thm_alpha_sink    = mo.ui.slider(0.01, 0.4, step=0.01, value=0.05,
-                                      label="Mean path weight ᾱ — with sink", show_value=True)
+                                      label="Mean path weight ᾱ, with sink", show_value=True)
     mo.vstack([thm_L, thm_n, thm_cmax, thm_alpha_no_sink, thm_alpha_sink])
     return thm_L, thm_alpha_no_sink, thm_alpha_sink, thm_cmax, thm_n
 
@@ -1063,8 +1072,8 @@ def _(go, mo, np, thm_L, thm_alpha_no_sink, thm_alpha_sink, thm_cmax, thm_n):
         "*L* the no-sink curve runs far above the with-sink curve, so deeper models need stronger sinks "
         "to hold the Jacobian down. The empirical check is the live GPT-2 scaling experiment below."
         if thm_L.value >= 10 else
-        "At shallow *L* the two curves nearly coincide — the gap is small, so sinks aren't urgently "
-        "needed yet. Push *L* higher to see the divergence the paper predicts."
+        "At shallow *L* the two curves nearly coincide. The gap stays small, so sinks are not "
+        "yet urgent. Push *L* higher to see the divergence the paper predicts."
     )
     mo.vstack([_fig2, mo.md(_paper_pred)], align="center")
     return
@@ -1129,7 +1138,7 @@ def _(alt, mo, pl):
         .properties(
             width=380, height=260,
             title=alt.TitleParams(
-                text="Longer context → stronger sinks (Figure 5a, paper §4.1) — values approximate",
+                text="Longer context → stronger sinks (Figure 5a, paper §4.1): values approximate",
                 color="#e2e8f0", fontSize=12,
             ),
         )
@@ -1161,7 +1170,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(alt, mo, pl):
     # Exact values from paper Table 1 (ε = 0.8).
-    # Table header: "Sink Metric (ε = 0.8)"  — these are the only ε values reported in Table 1.
+    # Table header: "Sink Metric (ε = 0.8)". These are the only ε values reported in Table 1.
     _llama_data = pl.DataFrame({
         "Model": ["LLaMA 3.1 8B", "LLaMA 3.1 70B", "LLaMA 3.1 405B"],
         "Params (B)": [8, 70, 405],
@@ -1229,18 +1238,16 @@ def _(mo):
 
     Table 1 uses LLaMA 3.1 to validate Prediction 2. Here we run the same measurement on
     the open GPT-2 family: four models spanning 12× in parameter count and 4× in depth.
-    All four load into the shared model cache and **stay resident in VRAM** — after this cell
-    runs once, switching the 🔬 model picker at the top becomes instant.
+    All four models load into a shared cache and **stay resident in VRAM**, so switching
+    between them later costs no reload time.
     """)
     return
 
 
 @app.cell
 def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, alt, device, mo, pl, torch):
-    # Auto-runs on load: measures GPT-2 Small → Medium → Large → XL through the shared
-    # MODEL_CACHE (fp32, kept resident — the GPU has the room, and the picker above
-    # reuses them for free). Uses a fixed probe prompt (not the live text box) so
-    # editing text above never re-triggers four model loads.
+    # Fixed probe prompt, not the live text box, so editing text elsewhere never
+    # re-triggers four model loads. Models load fp32 into MODEL_CACHE and stay resident.
     import time as _time
     _variants = [
         ("gpt2",        "Small (124M)",  124,  12),
@@ -1318,7 +1325,7 @@ def _(AutoModelForCausalLM, AutoTokenizer, MODEL_CACHE, alt, device, mo, pl, tor
 
     # Conclusion derived from the live numbers, never asserted ahead of them. Read at the
     # strict ε=0.8 threshold (the paper's Table 1 bar), which has the headroom to show a
-    # depth trend — ε=0.3 saturates on short text.
+    # depth trend; ε=0.3 saturates on short text.
     _e08 = _df_s.filter(pl.col("ε") == "ε = 0.8").sort("Params (M)")
     _r08 = _e08["Sink Rate %"].to_list()
     _small_r, _large_r = _r08[0], _r08[-1]
@@ -1349,15 +1356,22 @@ def _(mo):
     ### The Sink Census: 24 Domains, One Batched Pass
 
     A single sentence is one sample. The paper measures its sink metric over **170 prompts
-    spanning many domains** (Appendix C.3) — medical abstracts, legal boilerplate, IRC chat
-    logs, HTML — because a sink that only shows up on tidy English prose would be a curiosity,
-    not a mechanism.
+    spanning many domains** (Appendix C.3): medical abstracts, legal boilerplate, IRC chat
+    logs, HTML. A sink that only shows up in tidy English prose would be a curiosity, not
+    a mechanism.
 
-    We run the same census on GPT-2: 24 prompts from 24 different text domains, truncated to
-    the paper's T = 64 tokens, executed as **one padded, masked, batched forward pass** on the
-    GPU. For each head we get the mean sink score across domains — and, more telling, the
-    *standard deviation*: a structural sink should hold across every domain.
+    We built a smaller census in the same spirit: 24 original prompts across 24 different
+    text domains (not the paper's own 170, but comparable in range), truncated to the
+    paper's T = 64 tokens and executed as **one padded, masked, batched forward pass** on
+    the GPU. For each head we get the mean sink score across domains, and, more telling,
+    the *standard deviation*: a structural sink should hold across every domain.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
     return
 
 
@@ -1389,14 +1403,14 @@ def _(BOS_ID, mo, model, tokenizer, torch):
         "Once upon a time, in a village at the edge of a great forest, there lived a woodcutter and his two children, Hansel and Gretel.",
         "The Treaty of Westphalia, signed in 1648, ended the Thirty Years' War and established the principle of state sovereignty that underpins the modern international order.",
         "Q: How do I reset my password? A: Click 'Forgot password' on the login page, enter your email address, and follow the link we send you within 15 minutes.",
-        "E4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Na5",
+        "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Na5",
         "Dear Hiring Manager, I am writing to express my interest in the Senior Data Engineer position posted on your careers page. I have eight years of experience building pipelines.",
         "The GDP deflator differs from the consumer price index in that it measures the prices of all domestically produced goods, not just a fixed basket of consumer items.",
         "Verse 1: City lights are fading out the rearview mirror glow / Every mile a memory of a place I used to know / Chorus: And I'm gone, gone, gone",
         "SELECT customer_id, SUM(order_total) AS lifetime_value FROM orders WHERE order_date >= '2024-01-01' GROUP BY customer_id HAVING SUM(order_total) > 1000 ORDER BY lifetime_value DESC;",
         "Water boils at 100 degrees Celsius at sea level, but at higher altitudes the reduced atmospheric pressure lowers the boiling point by roughly one degree per 300 meters.",
         "In the 87th minute, the substitute striker latched onto a through ball, rounded the keeper, and slotted home the winner to send the home crowd into raptures.",
-        "aujourd'hui maman est morte. Ou peut-etre hier, je ne sais pas. J'ai recu un telegramme de l'asile: mere decedee, enterrement demain.",
+        "Le vieux pecheur regardait la mer depuis le quai, comme chaque matin depuis quarante ans. Le ciel gris annoncait une tempete, mais il n'avait jamais eu peur de l'eau.",
         "The forecast for Thursday calls for morning fog giving way to partly sunny skies, with highs near 18 degrees and a 30 percent chance of showers after dark.",
         "Renaissance perspective, first formalized by Brunelleschi around 1415, allowed painters to construct convincing three-dimensional space on a flat surface using a single vanishing point.",
     ]
@@ -1428,7 +1442,7 @@ def _(BOS_ID, mo, model, tokenizer, torch):
         "line": f"{int(_mf_c.sum().item())} tokens across 24 prompts in one batched forward "
                 f"({_dt_c:.2f}s{_gpu_c})",
     }
-    mo.md(f"*Census computed: {census_stats['line']}. Slice it below — filtering is free, "
+    mo.md(f"*Census computed: {census_stats['line']}. Slice it below: filtering is free, "
           "the attention tensor is already measured.*")
     return CENSUS_DOMAINS, census_sink, census_stats
 
@@ -1439,7 +1453,7 @@ def _(CENSUS_DOMAINS, mo):
                               label="Census sink threshold ε", show_value=True)
     census_domains_sel = mo.ui.multiselect(
         options=CENSUS_DOMAINS, value=CENSUS_DOMAINS,
-        label="Domains to include (deselect some — does the sink map care?)",
+        label="Domains to include (deselect some and see if the sink map cares)",
     )
     mo.vstack([census_eps, census_domains_sel])
     return census_domains_sel, census_eps
@@ -1481,7 +1495,7 @@ def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_eps, ce
                          alt.Tooltip("std:Q", format=".3f", title="Std over selected domains")],
             )
             .properties(width=440, height=290, title=alt.TitleParams(
-                text=f"Sink census, {len(_sel_idx)} domains — {_n_sink_c}/{_nh_c} heads sink (ε={_eps_c:.2f})",
+                text=f"Sink census, {len(_sel_idx)} domains: {_n_sink_c}/{_nh_c} heads sink (ε={_eps_c:.2f})",
                 color="#e2e8f0", fontSize=12))
         )
 
@@ -1503,7 +1517,7 @@ def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_eps, ce
                 tooltip=[alt.Tooltip("domain:N"), alt.Tooltip("rate:Q", format=".1f")],
             )
             .properties(width=380, height=14 * len(_dom_rows) + 40, title=alt.TitleParams(
-                text="Sink rate by domain — nearly flat is the point",
+                text="Sink rate by domain: nearly flat is the point",
                 color="#e2e8f0", fontSize=12))
         )
         _combo_c = (
@@ -1518,7 +1532,7 @@ def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_eps, ce
                 f"**{_n_sink_c}/{_nh_c} heads** sink on average over your selected domains, "
                 f"**{_stable_c}** with cross-domain std < 0.10. Per-domain sink rates span only "
                 f"**{min(_rates_c):.0f}%–{max(_rates_c):.0f}%** across text types as different as "
-                f"chess notation and French prose — the sink is structural, not stylistic, exactly "
+                f"chess notation and French prose. The sink is structural, not stylistic: exactly "
                 f"what a defence mechanism must be. Drag ε to see how the census hardens or "
                 f"dissolves; deselect domains to try to break the pattern. "
                 f"({census_stats['line']}.)"),
@@ -1558,14 +1572,20 @@ def _(mo):
 
     This is a real `if-else` statement implemented in attention weights. It fires whenever the
     previous token is a literal apostrophe: contractions like `I'm`, possessives, quoted text,
-    any of it. No apostrophe in sight, and it costs nothing. Dormant behind the sink.
+    any of it. With no apostrophe in sight, it costs nothing. It stays dormant behind the sink.
 
-    That specific head lives in Gemma 7B. Does GPT-2 have if-else heads of its own?
-    Rather than take it on faith, the **mode-switch finder** below measures it: give it two
-    texts — one with a trigger feature, one without — and it ranks every attention head by how much
-    their BOS routing *changes* between the two. Heads that stay put are static sinks or
-    static workers; heads that jump are conditional if-else heads, caught in the act.
+    That specific head lives in Gemma 7B. GPT-2 has its own if-else heads, and the
+    **mode-switch finder** below finds them: give it two texts, one with a trigger feature and
+    one without, and it ranks every attention head by how much its BOS routing changes between
+    the two. Heads that stay put are static sinks or static workers. Heads that jump are
+    conditional if-else heads, caught in the act.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
     return
 
 
@@ -1610,7 +1630,7 @@ def _(SWITCH_PRESETS, mo, switch_preset):
 def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, pl, switch_text_a, switch_text_b, tokenizer, torch):
     # Mode-switch finder: one padded, batched forward for both texts, then per-head
     # |Δ BOS attention| between conditions. A large Δ means the head conditions its
-    # sink behaviour on content — the paper's 'if-else' mechanism (§3.2), measured
+    # sink behaviour on content, the paper's 'if-else' mechanism (§3.2), measured
     # across the whole grid instead of asserted for one hand-picked head.
     _ra = tokenizer.encode(switch_text_a.value, add_special_tokens=False)
     _rb = tokenizer.encode(switch_text_b.value, add_special_tokens=False)
@@ -1644,10 +1664,10 @@ def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, pl, switch_text_a, switch_text_
         alt.Chart(_df_ms)
         .mark_circle(size=70, opacity=0.85, stroke="#07080f", strokeWidth=0.5)
         .encode(
-            x=alt.X("B:Q", title="BOS attention — Text B (trigger absent)",
+            x=alt.X("B:Q", title="BOS attention, Text B (trigger absent)",
                     scale=alt.Scale(domain=[0, 1]),
                     axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
-            y=alt.Y("A:Q", title="BOS attention — Text A (trigger present)",
+            y=alt.Y("A:Q", title="BOS attention, Text A (trigger present)",
                     scale=alt.Scale(domain=[0, 1]),
                     axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
             color=alt.Color("absd:Q", scale=alt.Scale(scheme="plasma"),
@@ -1672,9 +1692,9 @@ def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, pl, switch_text_a, switch_text_
         mo.md(
             f"Heads on the diagonal treat both texts identically. The biggest mode-switchers on "
             f"this pair: {_tbl_ms}. Head **{_biggest['label']}** shifts its BOS routing by "
-            f"**{_biggest['delta']:+.2f}** between conditions — GPT-2's closest analogue of the "
-            "Gemma apostrophe head. Edit the two texts to hunt for other triggers "
-            "(digits, quotes, code, a second language). Both texts run as one batched forward pass."),
+            f"**{_biggest['delta']:+.2f}** between conditions, GPT-2's closest analogue of the "
+            "Gemma apostrophe head. Edit the two texts to hunt for other triggers: "
+            "digits, quotes, code, a second language. Both texts run as one batched forward pass."),
     ], align="center")
     return
 
@@ -1687,14 +1707,20 @@ def _(mo):
     ### Verifying the No-Op: Value Norms Across Every Head
 
     The no-op story has a testable second half. Routing attention to BOS only *nullifies* a
-    head if the BOS **value vector** it attends to has near-zero norm — otherwise the head
+    head if the BOS **value vector** it attends to has near-zero norm. Otherwise the head
     would inject BOS's content everywhere. The paper verifies this for one Gemma head
     (Figure 4b). Here we check it for **every GPT-2 head at once**, on your text.
 
     For each head we compute the ratio ‖v_BOS‖ / mean‖v_content‖ from the actual per-head
     value projections, and plot it against that head's sink score. If the mechanism is real,
-    strong sinks should sit at low ratios — attending hard to a value that says nothing.
+    strong sinks should sit at low ratios: attending hard to a value that says nothing.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
     return
 
 
@@ -1746,18 +1772,18 @@ def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, np, pl, sink_scores_live, text_
                      alt.Tooltip("ratio:Q", format=".3f", title="BOS value ratio")],
         )
         .properties(width=430, height=290, title=alt.TitleParams(
-            text=f"BOS value norm vs sink strength, all {N_LAYERS * N_HEADS} heads — Pearson r = {_r_v:+.2f}",
+            text=f"BOS value norm vs sink strength, all {N_LAYERS * N_HEADS} heads: Pearson r = {_r_v:+.2f}",
             color="#e2e8f0", fontSize=12))
         .configure_view(stroke="#1e2d47", fill="#0d1220")
         .configure(background="#07080f")
     )
     _read_v = (
-        f"the stronger a head sinks, the *smaller* the value vector it drinks from "
-        f"(r = {_r_v:+.2f}). Attending to BOS really is attending to nothing — the "
-        "no-op is implemented in the values, not just the attention pattern. The paper "
+        f"the stronger a head sinks, the *smaller* the value vector it draws from "
+        f"(r = {_r_v:+.2f}). Attending to BOS is attending to nothing: the "
+        "no-op sits in the values, not just the attention pattern. The paper "
         "showed this for one Gemma head; it holds across GPT-2's whole grid."
         if _r_v < -0.15 else
-        f"on this text the correlation is weak (r = {_r_v:+.2f}) — GPT-2's heads separate "
+        f"on this text the correlation is weak (r = {_r_v:+.2f}). GPT-2's heads separate "
         "less cleanly than Gemma's single studied head. Try longer or more varied text."
     )
     mo.vstack([
@@ -1787,8 +1813,14 @@ def _(mo):
     return
 
 
-@app.cell
-def _(N_HEADS, N_LAYERS, anywidget, mo, sink_scores_live, tokens_live, traitlets):
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
+    return
+
+
+@app.cell(hide_code=True)
+def _(anywidget, traitlets):
     class SinkMapWidget(anywidget.AnyWidget):
         _esm = r"""
         function render({ model, el }) {
@@ -1840,13 +1872,16 @@ def _(N_HEADS, N_LAYERS, anywidget, mo, sink_scores_live, tokens_live, traitlets
               <text x="${lx+90}" y="${ly+22}" text-anchor="end" font-size="8" fill="#94a3b8">100%</text>
               <text x="${lx+45}" y="${ly-3}" text-anchor="middle" font-size="8" fill="#94a3b8">BOS attention</text>`;
 
-            el.innerHTML = `<div style="background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:16px;max-width:640px;margin:0 auto">
+            // Container scales with the actual grid size (up to XL's 25x48) instead of
+            // squeezing every model into a fixed 640px box, so cells stay readable.
+            const boxW = Math.max(640, svgW + 32);
+            el.innerHTML = `<div style="background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:16px;max-width:${boxW}px;margin:0 auto">
               <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}"
                 style="display:block;margin:0 auto;max-width:100%;height:auto">${s}</svg></div>`;
 
             const toks  = model.get("tokens");
             const strip = document.createElement("div");
-            strip.style.cssText = "font-size:11px;font-family:JetBrains Mono;margin-top:10px;line-height:2.2;max-width:640px;margin-left:auto;margin-right:auto";
+            strip.style.cssText = `font-size:11px;font-family:JetBrains Mono;margin-top:10px;line-height:2.2;max-width:${boxW}px;margin-left:auto;margin-right:auto`;
             strip.innerHTML = toks.map((t,i) => i===0
               ? `<span style="background:#78350f;color:#fcd34d;padding:1px 6px;border-radius:3px;margin:2px">${t}</span>`
               : `<span style="background:#0f1729;color:#94a3b8;padding:1px 5px;border-radius:3px;margin:2px">${t}</span>`
@@ -1876,10 +1911,11 @@ def _(N_HEADS, N_LAYERS, anywidget, mo, sink_scores_live, tokens_live, traitlets
         n_heads     = traitlets.Int(12).tag(sync=True)
         sel_layer   = traitlets.Int(-1).tag(sync=True)
         sel_head    = traitlets.Int(-1).tag(sync=True)
+    return (SinkMapWidget,)
 
-    # mo.ui.anywidget makes the widget's synced traits (sel_layer/sel_head) reactive:
-    # a click in the JS grid now re-runs the drill-down cell below. A bare
-    # SinkMapWidget syncs to the frontend but marimo never re-runs on its changes.
+
+@app.cell
+def _(N_HEADS, N_LAYERS, SinkMapWidget, mo, sink_scores_live, tokens_live):
     sink_widget = mo.ui.anywidget(SinkMapWidget(
         sink_scores=sink_scores_live.flatten().tolist(),
         tokens=tokens_live,
@@ -1887,7 +1923,7 @@ def _(N_HEADS, N_LAYERS, anywidget, mo, sink_scores_live, tokens_live, traitlets
         n_heads=N_HEADS,
     ))
     mo.hstack([sink_widget], justify="center")
-    return SinkMapWidget, sink_widget
+    return (sink_widget,)
 
 
 @app.cell
@@ -1932,7 +1968,7 @@ def _(alt, attn_live, mo, pl, sink_widget, tokens_live):
             .configure(background="#07080f")
         )
         _drill = mo.vstack([
-            mo.Html(f'<p style="font-family:Space Grotesk;font-size:13px;color:{_col3};margin:4px 0 8px;max-width:640px;margin-left:auto;margin-right:auto">▶ Layer {_sl}, Head {_sh} — {_lbl3} (sink score = {_sc3:.3f})</p>'),
+            mo.Html(f'<p style="font-family:Space Grotesk;font-size:13px;color:{_col3};margin:4px 0 8px;max-width:640px;margin-left:auto;margin-right:auto">▶ Layer {_sl}, Head {_sh}: {_lbl3} (sink score = {_sc3:.3f})</p>'),
             _ch3,
         ], align="center")
     _drill
@@ -2001,7 +2037,7 @@ def _(alt, attn_live, mo, np, pl):
         .properties(
             width=440, height=280,
             title=alt.TitleParams(
-                text=f"Entropy vs. BOS attention — {_n_sink_e} of {_Le * _He} heads are sinks (ε=0.3)",
+                text=f"Entropy vs. BOS attention: {_n_sink_e} of {_Le * _He} heads are sinks (ε=0.3)",
                 color="#e2e8f0", fontSize=12))
         .configure_view(stroke="#1e2d47", fill="#0d1220")
         .configure(background="#07080f")
@@ -2016,7 +2052,7 @@ def _(alt, attn_live, mo, np, pl):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ACT V: IS <BOS> SPECIAL? — DATA PACKING EXPERIMENTS
+# ACT V: IS <BOS> SPECIAL? DATA PACKING EXPERIMENTS
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.cell(hide_code=True)
@@ -2024,7 +2060,8 @@ def _(mo):
     mo.md(r"""
     ## Act V: Is ⟨BOS⟩ Special?
 
-    Everything so far assumes the sink lives at `<BOS>`. Is that token special, or would any first-position token do?
+    Everything so far assumes the sink lives at `<BOS>`. This section tests whether that
+    token is special, or whether any first-position token would do the same job.
 
     The paper answers this by training multiple 120M-parameter models on **30B tokens** with
     different data packing strategies (§5, Appendix A.3). Four setups:
@@ -2035,7 +2072,8 @@ def _(mo):
       can attend to it regardless of document boundaries
     - **No fixed BOS:** `<BOS>` appears only at document boundaries, not pinned
 
-    If the model trains *with* fixed BOS, what happens when you *remove* BOS at inference?
+    The chart below shows what happens at inference when a model trained *with* fixed BOS
+    has that BOS *removed*.
 
     *Data: exact values from Table 2, paper §5.*
     """)
@@ -2051,12 +2089,12 @@ def _(alt, mo, pl):
             "Causal, no fixed BOS\n(infer: BOS+text)",
             "Causal, no fixed BOS\n(infer: text only)",
             "Causal + fixed BOS\n(infer: BOS+text)",
-            "Causal + fixed BOS\n(infer: text only — ⚠)",
+            "Causal + fixed BOS\n(infer: text only, ⚠)",
             "Intra-doc, no BOS\n(infer: text only)",
             "Intra-doc, BOS at doc bounds\n(infer: BOS+text)",
             "Intra-doc, BOS at doc bounds\n(infer: text only)",
             "Intra-doc + fixed BOS\n(infer: BOS+text)",
-            "Intra-doc + fixed BOS\n(infer: text only — ⚠)",
+            "Intra-doc + fixed BOS\n(infer: text only, ⚠)",
         ],
         "Sink Metric %": [65.10, 65.15, 90.84, 0.05, 28.23, 83.33, 50.24, 90.56, 0.00],
         "Valid Loss":    [2.69,  2.70,  2.69,  7.56, 2.67,  2.67,  2.68,  2.67,  7.78],
@@ -2118,7 +2156,8 @@ def _(mo):
     mo.md(r"""
     ## The Verdict: Remove the Sink → Everything Breaks
 
-    The packing experiments established that sinks form regardless of training setup. Are they *useful*, or a harmless artifact?
+    The packing experiments established that sinks form regardless of training setup. This
+    section tests whether they are *useful* or just a harmless artifact.
 
     **Remove the BOS at inference and performance collapses**, especially on long-context tasks where the mixing problem is worst.
 
@@ -2130,7 +2169,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(alt, mo, pl):
     # Exact values from Table 3, paper §5.
-    # Note: RULER context = 4096 tokens (NOT 128k — that's a different benchmark run).
+    # Note: RULER context = 4096 tokens (not 128k, that is a different benchmark run).
     _bench = pl.DataFrame({
         "Benchmark": ["ARC-Easy", "ARC-Chal.", "PIQA", "SIQA", "HellaSwag", "Winogrande", "RULER (4096 ctx)"],
         "With BOS":    [80.77,  53.50,  81.72,  48.26,  80.61,  72.85,  82.57],
@@ -2208,9 +2247,15 @@ def _(mo):
     High μ = representations are diverse (model distinguishes tokens).
     Low μ = representations have collapsed (model can't tell tokens apart).
 
-    This runs automatically on your text, repeated into the long-context regime where collapse
-    actually appears (on a one-line prompt the effect is near zero — collapse needs length).
+    This runs on your text, repeated into the long-context regime where collapse
+    appears (on a one-line prompt the effect stays near zero; collapse needs length).
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
     return
 
 
@@ -2266,12 +2311,12 @@ def _(BOS_ID, alt, mo, model, pl, text_input, tokenizer, torch):
     _msg = (
         f"Your text, repeated to **{_nc} content tokens**. Over those same tokens, μ = **{_mw:.4f}** "
         f"with a BOS sink present vs **{_mn:.4f}** without it (Δ={_d:+.4f})."
-        + (f" The sink keeps content representations **{_d / max(_mn, 1e-8) * 100:.0f}% more diverse** — "
+        + (f" The sink keeps content representations **{_d / max(_mn, 1e-8) * 100:.0f}% more diverse**, "
            "the over-mixing prediction, live on GPT-2." if _d > 0 else
            " The gap is small or absent at this length; it grows with context (scan below) "
            "and shows most sharply on the long-context benchmarks above.")
     )
-    mo.vstack([_ch5, mo.md(_msg)])
+    mo.vstack([_ch5, mo.md(_msg)], align="center")
     return
 
 
@@ -2284,9 +2329,15 @@ def _(mo):
 
     Theorem 3.2 predicts the benefit of the sink grows with sequence length: longer contexts
     create more paths for information to mix, so the protection BOS provides becomes more
-    critical. The experiment below scans from 32 → 960 tokens (the current text repeated)
+    critical. The experiment below scans from 32 to 960 tokens (the current text repeated)
     and plots μ_with_BOS vs μ_without_BOS as a curve. The gap should widen with length.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
     return
 
 
@@ -2302,8 +2353,8 @@ def _(mo):
 def _(BOS_ID, alt, len_max_slider, mo, model, pl, text_input, tokenizer, torch):
     # Content-only μ (see the collapse cell): compares the SAME content tokens with vs
     # without a leading BOS at each length. All (length × condition) sequences run as ONE
-    # padded, masked batch through the transformer body — model.transformer skips the
-    # 50k-vocab LM head, whose logits we never use. Re-runs on slider / text change.
+    # padded, masked batch through the transformer body. model.transformer skips the
+    # 50k-vocab LM head, whose logits we never use. Re-runs on slider or text change.
     import time as _t_cl
     _base_cl = tokenizer.encode(text_input.value, add_special_tokens=False)
     _max_cl  = min(len_max_slider.value, 1023)   # GPT-2 max pos = 1024 total tokens
@@ -2398,9 +2449,9 @@ def _(BOS_ID, alt, len_max_slider, mo, model, pl, text_input, tokenizer, torch):
         _line_cl, _gap_line_cl,
         mo.md(f"Peak gap at length **{_peak_cl['Length']}**: μ_with={_peak_cl['With BOS']:.4f}, "
               f"μ_without={_peak_cl['Without BOS']:.4f}, gap={_peak_cl['Gap']:+.5f}. "
-              f"{_trend_cl} — the mechanistic prediction of Theorem 3.2: the collapse problem "
-              "worsens with context, so the sink's value as a countermeasure grows with it. "
-              f"*(All {len(_lens_cl) * 2} sequences — {_ntok_cl} tokens — in one batched pass "
+              f"{_trend_cl}, matching the mechanistic prediction of Theorem 3.2: the collapse "
+              "problem worsens with context, so the sink's value as a countermeasure grows with it. "
+              f"*(All {len(_lens_cl) * 2} sequences, {_ntok_cl} tokens, in one batched pass "
               f"through the transformer body, skipping the unused LM head: {_dt_cl:.2f}s"
               + (f", peak VRAM {torch.cuda.max_memory_allocated()/1e9:.2f} GB"
                  if model.device.type == "cuda" else "") + ".)*"),
@@ -2417,24 +2468,32 @@ def _(mo):
     mo.md(r"""
     ## Novel Extension: Strategic Sink Token Placement
 
-    The paper establishes that sinks are load-bearing. Can they be engineered deliberately?
+    The paper establishes that sinks are load-bearing. This section tests whether they can be
+    engineered on purpose.
 
-    **Hypothesis:** A single BOS at position 0 forces all heads to route long-range attention
-    to the very start of the sequence. For long contexts, this creates a bottleneck.
-    What if we insert additional BOS tokens every *K* positions, distributing the sink load?
+    **Hypothesis:** a single BOS at position 0 forces every head to route long-range attention
+    to the very start of the sequence. For long contexts, this creates a bottleneck. We test
+    whether inserting additional BOS tokens every *K* positions distributes the sink load and
+    relieves it.
 
-    **Metric:** *content-token diversity* μ — the mean pairwise cosine distance among the
-    last-layer hidden states of the **content (non-sink) tokens only**. Higher μ = content
-    representations stay more distinct (less collapse). Crucially, μ is measured over the
+    **Metric:** *content-token diversity* μ, the mean pairwise cosine distance among the
+    last-layer hidden states of the **content (non-sink) tokens only**. Higher μ means content
+    representations stay more distinct (less collapse). μ is measured over the
     **same content tokens** under every strategy, so inserting sink tokens cannot change it
-    mechanically — it can only change it by actually altering how content is represented.
-    (The tempting metric — *attention mass reaching content* — is dominated by sequence length
-    and mechanically favours the shortest sequence, so it can never test this hypothesis; μ over
+    mechanically; it can only change it by altering how content is represented.
+    (The tempting metric, *attention mass reaching content*, is dominated by sequence length
+    and mechanically favours the shortest sequence, so it can never test this hypothesis. μ over
     a fixed content set is the honest choice.)
 
     **⚠ This experiment is not in the paper.** It is a novel hypothesis, tested here on GPT-2.
     Raise the length slider to probe the regime where Theorem 3.2 predicts the bottleneck bites.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(model_picker):
+    model_picker("🔬 Model")
     return
 
 
@@ -2523,7 +2582,7 @@ def _(BOS_ID, alt, len_slider, mo, model, pl, tokenizer, torch):
         (_base_rule + _pts)
         .properties(width=430, height=270,
             title=alt.TitleParams(
-                text=f"Strategic sink placement — content-token diversity μ vs interval K (n={_nC})",
+                text=f"Strategic sink placement: content-token diversity μ vs interval K (n={_nC})",
                 color="#e2e8f0", fontSize=12))
         .configure_view(stroke="#1e2d47", fill="#0d1220")
         .configure(background="#07080f")
@@ -2534,14 +2593,14 @@ def _(BOS_ID, alt, len_slider, mo, model, pl, tokenizer, torch):
     _climb = "climbs monotonically as sink density rises" if _mono_density else "rises with sink density"
     if _delta > 0:
         _verdict = (
-            f"**Result:** content-token diversity μ {_climb} — from **{_mu_base:.3f}** with a single BOS "
+            f"**Result:** content-token diversity μ {_climb}, from **{_mu_base:.3f}** with a single BOS "
             f"to **{_best['mu']:.3f}** at K={_best['k_val']} (**{_pct:+.0f}%**, n={_nC} tokens, "
-            f"{_best['n_sinks']} sinks). Mechanistically this is the paper's *approximate no-op* at work: "
+            f"{_best['n_sinks']} sinks). This is the paper's *approximate no-op* at work: "
             "each inserted sink lets nearby heads route to a near-zero value and **stop mixing**, so "
-            "content tokens keep more of their own identity. The catch — less mixing is not automatically "
-            "better; past a point it under-contextualizes. So **sink density is a knob with a sweet "
+            "content tokens keep more of their own identity. Less mixing is not automatically "
+            "better; past a point it under-contextualizes. **Sink density is a knob with a sweet "
             "spot**, not a free win, and the test that settles it is downstream accuracy (RULER, "
-            "Needle-in-a-Haystack), not μ alone. Raise the length slider — the effect grows with "
+            "Needle-in-a-Haystack), not μ alone. Raise the length slider: the effect grows with "
             "context, exactly as Theorem 3.2 predicts."
         )
     else:
@@ -2550,11 +2609,11 @@ def _(BOS_ID, alt, len_slider, mo, model, pl, tokenizer, torch):
             f"(best: {_best['strategy']}, μ={_best['mu']:.4f} vs {_mu_base:.4f}; {_pct:+.1f}%). "
             "An honest null: at this length one position-0 sink already suffices, and extra sinks cost "
             "context without improving content diversity. Theorem 3.2 predicts the bottleneck bites at "
-            "longer contexts — raise the length slider to probe it."
+            "longer contexts. Raise the length slider to probe it."
         )
     mo.vstack([
         _ch6,
-        mo.md(_verdict + "\n\n*⚠ Not in the paper — a novel hypothesis measured live on GPT-2. μ is "
+        mo.md(_verdict + "\n\n*⚠ Not in the paper. A novel hypothesis measured live on GPT-2. μ is "
               "computed over the identical content tokens in every condition, so adding sink tokens "
               "cannot inflate or deflate it by construction (the dashed line marks the baseline).*"),
     ], align="center")
