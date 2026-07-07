@@ -1374,12 +1374,10 @@ def _(model_picker):
     return
 
 
-@app.cell
-def _(BOS_ID, mo, model, tokenizer, torch):
-    # 24-domain census, one batched forward (paper Appendix C.3 methodology, T=64).
-    # Compute-only: the per-(layer, prompt, head) sink tensor is kept, so the ε slider
-    # and domain filters below re-slice it with zero additional GPU work.
-    import time as _t_c
+@app.cell(hide_code=True)
+def _():
+    # Shared by the GPT-2 census below AND the modern-model test further down —
+    # both measure the same 24 prompts so their sink rates are directly comparable.
     CENSUS_DOMAINS = [
         "Biology", "Python code", "Legal contract", "IRC chat", "Recipe",
         "Finance news", "Sonnet", "Court report", "Breaking news", "Tech docs",
@@ -1387,7 +1385,7 @@ def _(BOS_ID, mo, model, tokenizer, torch):
         "Cover letter", "Economics", "Song lyrics", "SQL query", "Physics",
         "Sports report", "French novel", "Weather forecast", "Art history",
     ]
-    _CENSUS = [
+    CENSUS_TEXTS = [
         "The mitochondrion is a double-membrane-bound organelle found in most eukaryotic organisms, generating most of the cell's supply of adenosine triphosphate.",
         "def quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[0]\n    return quicksort([x for x in arr[1:] if x < pivot]) + [pivot]",
         "WHEREAS, the Parties desire to enter into this Agreement to set forth the terms and conditions of their business relationship, NOW THEREFORE, in consideration of the mutual covenants herein,",
@@ -1413,13 +1411,22 @@ def _(BOS_ID, mo, model, tokenizer, torch):
         "The forecast for Thursday calls for morning fog giving way to partly sunny skies, with highs near 18 degrees and a 30 percent chance of showers after dark.",
         "Renaissance perspective, first formalized by Brunelleschi around 1415, allowed painters to construct convincing three-dimensional space on a flat surface using a single vanishing point.",
     ]
-    _T_CENSUS = 64  # paper measures the sink on the first 64 tokens (Appendix C.3)
+    T_CENSUS = 64  # paper measures the sink on the first 64 tokens (Appendix C.3)
+    return CENSUS_DOMAINS, CENSUS_TEXTS, T_CENSUS
+
+
+@app.cell
+def _(BOS_ID, CENSUS_TEXTS, T_CENSUS, mo, model, tokenizer, torch):
+    # 24-domain census, one batched forward (paper Appendix C.3 methodology, T=64).
+    # Compute-only: the per-(layer, prompt, head) sink tensor is kept, so the ε slider
+    # and domain filters below re-slice it with zero additional GPU work.
+    import time as _t_c
     _t0_c = _t_c.perf_counter()
     if model.device.type == "cuda":
         torch.cuda.reset_peak_memory_stats()
 
-    _seqs_c = [[BOS_ID] + tokenizer.encode(t, add_special_tokens=False)[: _T_CENSUS - 1]
-               for t in _CENSUS]
+    _seqs_c = [[BOS_ID] + tokenizer.encode(t, add_special_tokens=False)[: T_CENSUS - 1]
+               for t in CENSUS_TEXTS]
     _Tm_c = max(len(s) for s in _seqs_c)
     _pad_c = tokenizer.eos_token_id
     _ids_c = torch.tensor([s + [_pad_c] * (_Tm_c - len(s)) for s in _seqs_c], device=model.device)
@@ -1443,7 +1450,7 @@ def _(BOS_ID, mo, model, tokenizer, torch):
     }
     mo.md(f"*Census computed: {census_stats['line']}. Slice it below: filtering is free, "
           "the attention tensor is already measured.*")
-    return CENSUS_DOMAINS, census_sink, census_stats
+    return census_sink, census_stats
 
 
 @app.cell
@@ -1537,6 +1544,193 @@ def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_eps, ce
                 f"({census_stats['line']}.)"),
         ], align="center")
     _view_c
+    return
+
+
+# ── The Modern-Model Test: Qwen2.5 ladder (0.5B → 14B) ────────────────────────
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### The Modern-Model Test: Does 2024 Sink Harder Than 2019?
+
+    Every live measurement so far used GPT-2 — a 2019 model trained on a **1,024-token**
+    context. The paper's Prediction 1 (§4.1) says training context length drives sink
+    formation, but the paper could only test it on 120M-parameter models it trained itself.
+
+    The GPU we're running on can test it on real frontier-grade models. **Qwen2.5**
+    (2024, ungated) is pre-trained with long-context stages up to **32K tokens** — 32× GPT-2's
+    window — and ships in sizes from 0.5B to 14B. If the paper is right, these models should
+    sink far harder than GPT-2 at the same ε, and harder as they grow (Prediction 2).
+
+    Each run executes the **same 24-domain census** as above on the model you pick, so the
+    numbers are directly comparable, and adds a bar to your personal Table 1 below. One note
+    from §5: Qwen2.5 has no ⟨BOS⟩ pinned during training, so the paper predicts its sink
+    forms on **whatever token comes first** — we measure attention to position 0, exactly as
+    the paper's sink metric does.
+
+    *VRAM guide (bf16): 0.5B ≈ 1 GB · 1.5B ≈ 3 GB · 3B ≈ 6 GB · 7B ≈ 15 GB · 14B ≈ 28 GB.
+    Models stay resident after loading — on a 96 GB card you can hold the whole ladder plus
+    all four GPT-2s and still have room.*
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    qwen_ladder_state = mo.state([])
+    get_qwen_ladder, set_qwen_ladder = qwen_ladder_state
+    qwen_pick = mo.ui.dropdown(
+        options={
+            "Qwen2.5-0.5B (24L × 14H)": "Qwen/Qwen2.5-0.5B",
+            "Qwen2.5-1.5B (28L × 12H)": "Qwen/Qwen2.5-1.5B",
+            "Qwen2.5-3B (36L × 16H)": "Qwen/Qwen2.5-3B",
+            "Qwen2.5-7B (28L × 28H)": "Qwen/Qwen2.5-7B",
+            "Qwen2.5-14B (48L × 40H)": "Qwen/Qwen2.5-14B",
+        },
+        value="Qwen2.5-0.5B (24L × 14H)",
+        label="Modern model to census",
+    )
+    qwen_go = mo.ui.run_button(label="⚡ Load & run the 24-domain census")
+    mo.hstack([qwen_pick, qwen_go], justify="start", gap=1)
+    return get_qwen_ladder, qwen_go, qwen_pick, set_qwen_ladder
+
+
+@app.cell
+def _(AutoModelForCausalLM, AutoTokenizer, CENSUS_TEXTS, MODEL_CACHE, T_CENSUS, device, mo, qwen_go, qwen_pick, set_qwen_ladder, torch):
+    mo.stop(
+        not qwen_go.value,
+        mo.md("*Pick a size and press **⚡ Load & run** — first run downloads the model, "
+              "then it stays resident in VRAM. Nothing here runs at notebook startup, so "
+              "the boot stays fast.*"),
+    )
+    import time as _t_q
+    _qid = qwen_pick.value
+    try:
+        _t0_q = _t_q.perf_counter()
+        if device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+        _tok_key = _qid + ":tokenizer"
+        if _tok_key not in MODEL_CACHE:
+            MODEL_CACHE[_tok_key] = AutoTokenizer.from_pretrained(_qid)
+        _tok_q = MODEL_CACHE[_tok_key]
+        if _qid not in MODEL_CACHE:
+            MODEL_CACHE[_qid] = AutoModelForCausalLM.from_pretrained(
+                _qid, attn_implementation="eager",
+                dtype=torch.bfloat16 if device == "cuda" else torch.float32,
+            ).to(device).eval()
+        _mdl_q = MODEL_CACHE[_qid]
+        _load_s = _t_q.perf_counter() - _t0_q
+
+        # Same 24 prompts, same T=64 truncation as the GPT-2 census. Qwen2.5 pins no
+        # BOS, so nothing is prepended (Table 2's "text" inference row) — the sink
+        # metric targets position 0 whatever token sits there, per Gu et al.
+        _pad_q = _tok_q.pad_token_id if _tok_q.pad_token_id is not None else (_tok_q.eos_token_id or 0)
+        _seqs_q = [_tok_q.encode(t, add_special_tokens=False)[:T_CENSUS] for t in CENSUS_TEXTS]
+        _Tm_q = max(len(s) for s in _seqs_q)
+        _ids_q = torch.tensor([s + [_pad_q] * (_Tm_q - len(s)) for s in _seqs_q], device=device)
+        _mask_q = torch.tensor([[1] * len(s) + [0] * (_Tm_q - len(s)) for s in _seqs_q],
+                               device=device)
+        _t1_q = _t_q.perf_counter()
+        with torch.no_grad():
+            _out_q = _mdl_q(_ids_q, attention_mask=_mask_q, output_attentions=True)
+        _A_q = torch.stack(_out_q.attentions).float()      # [L, B, H, T, T]
+        _mfq = _mask_q.float()
+        _sink_q = (_A_q[..., 0] * _mfq[None, :, None, :]).sum(-1) / _mfq.sum(-1)[None, :, None]
+        _mean_q = _sink_q.mean(dim=1)                      # [L, H] mean over 24 prompts
+        _fwd_s = _t_q.perf_counter() - _t1_q
+        _ntok_q = int(_mfq.sum().item())
+        _nl_q = _mdl_q.config.num_hidden_layers
+        _nh_q = _mdl_q.config.num_attention_heads
+
+        _entry_q = {
+            "model": _qid.split("/")[-1],
+            "params": _qid.split("-")[-1],
+            "rate03": float((_mean_q > 0.3).float().mean().item()) * 100,
+            "rate08": float((_mean_q > 0.8).float().mean().item()) * 100,
+            "heads": _nl_q * _nh_q,
+        }
+        # Accumulate into the ladder, replacing any previous run of the same model.
+        # NB: functional update — reading the getter here would make this cell re-run
+        # on its own write (run_button already back to False → mo.stop would eat the result).
+        set_qwen_ladder(
+            lambda prev, _n=_entry_q: [e for e in prev if e["model"] != _n["model"]] + [_n])
+        del _out_q, _A_q, _sink_q
+
+        _gpu_q = ""
+        if device == "cuda":
+            _gpu_q = (f" · peak VRAM {torch.cuda.max_memory_allocated()/1e9:.1f} GB, "
+                      f"{torch.cuda.memory_allocated()/1e9:.1f} GB resident")
+        _result_q = mo.md(
+            f"**{_entry_q['model']}** ({_nl_q}L × {_nh_q}H = {_entry_q['heads']} heads): "
+            f"**{_entry_q['rate03']:.0f}%** of heads sink at ε=0.3, **{_entry_q['rate08']:.0f}%** "
+            f"at the paper's strict ε=0.8 bar — measured over the same 24 domains as the GPT-2 "
+            f"census above. Load: {_load_s:.1f}s · census: {_fwd_s:.2f}s for {_ntok_q} tokens "
+            f"({_ntok_q/_fwd_s:,.0f} tok/s){_gpu_q}. The comparison chart below updates with "
+            "every model you run.")
+    except Exception as _e_q:
+        _result_q = mo.md(
+            f"⚠ Could not run `{_qid}`: `{type(_e_q).__name__}: {_e_q}`. "
+            "Most likely a download interruption or out-of-memory on this device — try a "
+            "smaller size; the rest of the notebook is unaffected.")
+    _result_q
+    return
+
+
+@app.cell
+def _(alt, census_sink, census_eps, get_qwen_ladder, MODEL_ID, mo, pl):
+    # "Build your own Table 1": every censused model on one axis, alongside the
+    # paper's published LLaMA 3.1 numbers. Re-renders whenever a Qwen run finishes
+    # (mo.state) or the GPT-2 census changes (model picker / ε slider above).
+    _eps_l = census_eps.value
+    _gpt_rate = float((census_sink.mean(dim=1) > _eps_l).float().mean().item()) * 100
+    _rows_l = [{"model": f"{MODEL_ID} (live, ε={_eps_l:.2f})", "rate": _gpt_rate,
+                "source": "measured here"}]
+    for _e_l in get_qwen_ladder():
+        _rate_l = _e_l["rate03"] if abs(_eps_l - 0.3) < 0.25 else _e_l["rate08"]
+        _eps_shown = 0.3 if abs(_eps_l - 0.3) < 0.25 else 0.8
+        _rows_l.append({"model": f"{_e_l['model']} (live, ε={_eps_shown})",
+                        "rate": _rate_l, "source": "measured here"})
+    _rows_l += [
+        {"model": "LLaMA 3.1 8B (paper, ε=0.8)", "rate": 45.97, "source": "paper Table 1"},
+        {"model": "LLaMA 3.1 70B (paper, ε=0.8)", "rate": 73.49, "source": "paper Table 1"},
+        {"model": "LLaMA 3.1 405B (paper, ε=0.8)", "rate": 78.29, "source": "paper Table 1"},
+    ]
+    _ch_l = (
+        alt.Chart(pl.DataFrame(_rows_l))
+        .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+        .encode(
+            y=alt.Y("model:N", sort=None, title=None,
+                    axis=alt.Axis(labelColor="#94a3b8", labelFontSize=10, labelLimit=260)),
+            x=alt.X("rate:Q", title="% of heads that are sinks",
+                    scale=alt.Scale(domain=[0, 100]),
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            color=alt.Color("source:N",
+                scale=alt.Scale(domain=["measured here", "paper Table 1"],
+                                range=["#f59e0b", "#818cf8"]),
+                legend=alt.Legend(title=None, labelColor="#94a3b8")),
+            tooltip=[alt.Tooltip("model:N"), alt.Tooltip("rate:Q", format=".1f"),
+                     alt.Tooltip("source:N")],
+        )
+        .properties(width=460, height=26 * len(_rows_l) + 30,
+            title=alt.TitleParams(
+                text="Your Table 1 — live measurements vs the paper's published numbers",
+                color="#e2e8f0", fontSize=12))
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+    _note_l = (
+        "Run several Qwen sizes above and the ladder fills in. Two paper predictions are "
+        "checkable at once: modern long-context models should out-sink GPT-2 at equal ε "
+        "(Prediction 1: training context), and bigger Qwen models should out-sink smaller "
+        "ones (Prediction 2: scale). Note the live ε tracks the census slider — set it to "
+        "0.8 to compare against the paper's LLaMA numbers on equal terms."
+        if get_qwen_ladder() else
+        "No modern models censused yet — the chart shows the current GPT-2 model against "
+        "the paper's published LLaMA numbers. Run a Qwen size above to start filling in "
+        "your own Table 1."
+    )
+    mo.vstack([_ch_l, mo.md(_note_l)], align="center")
     return
 
 
@@ -1949,17 +2143,15 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(alt, attn_live, mo, np, pl):
-    _ate = attn_live.cpu().numpy()          # [L, H, T, T]
-    _Le, _He, _Te, _ = _ate.shape
-    _bos_e = _ate[:, :, :, 0].mean(axis=2) # [L, H]
-
-    _ent_e = np.zeros((_Le, _He))
-    for _qi in range(_Te):
-        _re = _ate[:, :, _qi, :_qi + 1]    # [L, H, qi+1]
-        _re = _re / (_re.sum(axis=-1, keepdims=True) + 1e-12)
-        _ent_e += -(_re * np.log(_re + 1e-12)).sum(axis=-1)
-    _ent_e /= _Te
+def _(alt, attn_live, mo, pl):
+    # Entropy fully on-device: causal rows are exact zeros above the diagonal, and
+    # 0·log(0+ε) = 0, so per-query entropy is one fused tensor expression — no
+    # Python-loop-over-tokens on the CPU (the old version iterated T times in numpy).
+    _Le, _He, _Te, _ = attn_live.shape
+    _ent_t = -(attn_live * (attn_live + 1e-12).log()).sum(-1).mean(dim=2)  # [L, H]
+    _bos_t = attn_live[:, :, :, 0].mean(dim=2)                             # [L, H]
+    _ent_e = _ent_t.cpu().numpy()
+    _bos_e = _bos_t.cpu().numpy()
 
     _rows_e = [
         {"label": f"L{l}·H{h}", "layer": l, "head": h,
@@ -2573,6 +2765,41 @@ def _(BOS_ID, alt, len_slider, mo, model, pl, tokenizer, torch):
               "computed over the identical content tokens in every condition, so adding sink tokens "
               "cannot inflate or deflate it by construction (the dashed line marks the baseline).*"),
     ], align="center")
+    return
+
+
+# ── GPU report card ────────────────────────────────────────────────────────────
+
+@app.cell(hide_code=True)
+def _(MODEL_CACHE, MODEL_ID, device, mo, torch):
+    # Depends on MODEL_ID so it refreshes whenever the picker loads a new model.
+    _ = MODEL_ID
+    if device == "cuda":
+        _name_g = torch.cuda.get_device_name(0)
+        _total_g = torch.cuda.get_device_properties(0).total_memory / 1e9
+        _res_g = torch.cuda.memory_allocated() / 1e9
+        _models_g = [k for k in MODEL_CACHE if not k.endswith(":tokenizer")]
+        _card = mo.md(
+            f"""
+    ---
+    #### ⚙️ Under the hood
+
+    **GPU:** {_name_g} ({_total_g:.0f} GB) · **{_res_g:.1f} GB resident** ·
+    models cached: {', '.join(f'`{m}`' for m in _models_g)}
+
+    Every experiment above ran as **padded, masked, batched forward passes** under
+    `torch.no_grad()` — the census (24 prompts, 1 pass), Figure 2 (6 sequences, 2 passes),
+    the collapse scan (up to 20 sequences, 1 pass through the transformer body, LM head
+    skipped), sink placement (5 strategies, 1 pass). Entropy and sink metrics are fused
+    tensor ops on-device; nothing loops over tokens in Python. Models load once and stay
+    resident, so every reactive re-run you trigger costs only its forward pass.
+    """)
+    else:
+        _card = mo.md(
+            "---\n#### ⚙️ Under the hood\n\nRunning on **CPU** — all experiments still work "
+            "(batched exactly the same way), just slower. On a GPU runtime the models stay "
+            "resident in VRAM and every interaction re-runs in seconds.")
+    _card
     return
 
 
