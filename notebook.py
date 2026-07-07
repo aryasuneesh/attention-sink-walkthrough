@@ -335,15 +335,7 @@ def _(mo):
     }
     MODEL_LABELS = {v: k for k, v in MODEL_OPTIONS.items()}
     get_model_id, set_model_id = mo.state("gpt2")
-
-    def model_picker(label="🔬 Model"):
-        return mo.ui.dropdown(
-            options=MODEL_OPTIONS,
-            value=MODEL_LABELS[get_model_id()],
-            on_change=set_model_id,
-            label=label,
-        )
-    return MODEL_LABELS, MODEL_OPTIONS, get_model_id, model_picker, set_model_id
+    return MODEL_LABELS, MODEL_OPTIONS, get_model_id, set_model_id
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -365,8 +357,17 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo, model_picker):
-    model_pick = model_picker("🔬 Lab model (GPT-2 Small → XL)")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    # Built directly in this cell rather than via a shared factory function: a
+    # factory only receives get_model_id through closure, and marimo's static
+    # dependency graph can't see that, so on_change would never propagate to
+    # other cells even though the widget still renders with the right value.
+    model_pick = mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Lab model (GPT-2 Small → XL)",
+    )
     mo.vstack([
         model_pick,
         mo.md(
@@ -818,8 +819,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
@@ -1364,8 +1370,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
@@ -1451,20 +1462,22 @@ def _(BOS_ID, CENSUS_TEXTS, T_CENSUS, mo, model, tokenizer, torch):
 @app.cell(hide_code=True)
 def _(mo):
     get_census_eps, set_census_eps = mo.state(0.30)
-
-    def census_eps_slider(label="Census sink threshold ε"):
-        return mo.ui.slider(0.1, 0.9, step=0.05, value=get_census_eps(),
-                            on_change=set_census_eps, label=label, show_value=True)
-    return census_eps_slider, get_census_eps, set_census_eps
+    return get_census_eps, set_census_eps
 
 
 @app.cell
-def _(CENSUS_DOMAINS, census_eps_slider, mo):
+def _(CENSUS_DOMAINS, get_census_eps, mo, set_census_eps):
+    # Built directly in this cell, not via a shared factory: a factory only
+    # receives get_census_eps through closure, invisible to marimo's dependency
+    # graph, so on_change would never reach the cells that read the state.
+    census_eps_ui = mo.ui.slider(0.1, 0.9, step=0.05, value=get_census_eps(),
+                                 on_change=set_census_eps,
+                                 label="Census sink threshold ε", show_value=True)
     census_domains_sel = mo.ui.multiselect(
         options=CENSUS_DOMAINS, value=CENSUS_DOMAINS,
         label="Domains to include (deselect some and see if the sink map cares)",
     )
-    mo.vstack([census_eps_slider(), census_domains_sel])
+    mo.vstack([census_eps_ui, census_domains_sel])
     return (census_domains_sel,)
 
 
@@ -1581,7 +1594,7 @@ def _(mo):
 
 
 @app.cell
-def _(census_eps_slider, mo):
+def _(get_census_eps, mo, set_census_eps):
     qwen_ladder_state = mo.state([])
     get_qwen_ladder, set_qwen_ladder = qwen_ladder_state
     qwen_pick = mo.ui.dropdown(
@@ -1601,9 +1614,15 @@ def _(census_eps_slider, mo):
         label="Modern model to census",
     )
     qwen_go = mo.ui.run_button(label="⚡ Load & run the 24-domain census")
+    # Built directly here (see the note on the census slider above) so it stays
+    # wired to the shared state instead of desyncing from the census control.
+    census_eps_ui2 = mo.ui.slider(0.1, 0.9, step=0.05, value=get_census_eps(),
+                                  on_change=set_census_eps,
+                                  label="Sink threshold ε (shared with the census above)",
+                                  show_value=True)
     mo.vstack([
         mo.hstack([qwen_pick, qwen_go], justify="start", gap=1),
-        census_eps_slider("Sink threshold ε (shared with the census above)"),
+        census_eps_ui2,
     ])
     return get_qwen_ladder, qwen_go, qwen_pick, set_qwen_ladder
 
@@ -1793,8 +1812,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
@@ -1928,8 +1952,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
@@ -2025,8 +2054,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
@@ -2453,8 +2487,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
@@ -2535,8 +2574,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
@@ -2691,8 +2735,13 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(model_picker):
-    model_picker("🔬 Model")
+def _(MODEL_LABELS, MODEL_OPTIONS, get_model_id, mo, set_model_id):
+    mo.ui.dropdown(
+        options=MODEL_OPTIONS,
+        value=MODEL_LABELS[get_model_id()],
+        on_change=set_model_id,
+        label="🔬 Model",
+    )
     return
 
 
