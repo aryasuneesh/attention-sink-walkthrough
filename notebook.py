@@ -307,7 +307,6 @@ def _():
     import altair as alt
     import polars as pl
     import anywidget
-    import traitlets
     import numpy as np
     import plotly.graph_objects as go
 
@@ -316,7 +315,7 @@ def _():
     torch.set_grad_enabled(False)
     return (
         AutoModelForCausalLM, AutoTokenizer,
-        alt, anywidget, device, go, np, pl, torch, traitlets,
+        alt, anywidget, device, go, np, pl, torch,
     )
 
 
@@ -1794,7 +1793,7 @@ def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, np, pl, sink_scores_live, text_
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# HEAD EXPLORER (anywidget)
+# HEAD EXPLORER (altair click-selection)
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.cell(hide_code=True)
@@ -1819,119 +1818,76 @@ def _(model_picker):
     return
 
 
-@app.cell(hide_code=True)
-def _(anywidget, traitlets):
-    class SinkMapWidget(anywidget.AnyWidget):
-        _esm = r"""
-        function render({ model, el }) {
-          const NL = model.get("n_layers");
-          const NH = model.get("n_heads");
+@app.cell
+def _(N_HEADS, N_LAYERS, alt, mo, pl, sink_scores_live, tokens_live):
+    # Native altair grid with marimo point-selection — replaces the old anywidget grid.
+    # anywidget was the wrong tool here: this cell re-runs on every model/text change,
+    # and each new widget instance re-registered its JS module as a fresh virtual file;
+    # on molab the frontend then imported a dead URL ("not a valid anywidget").
+    # mo.ui.altair_chart selection is pure vega state — nothing to serve, nothing to break.
+    import html as _html_g
+    _rows_g = [
+        {"layer": f"L{l:02d}", "head": f"H{h:02d}", "li": l, "hi": h,
+         "sink": round(float(sink_scores_live[l, h].item()), 4)}
+        for l in range(N_LAYERS) for h in range(N_HEADS)
+    ]
+    _cw_g = max(16, min(38, 640 // N_HEADS))
+    _ch_g = max(10, min(24, 560 // N_LAYERS))
+    _grid_g = (
+        alt.Chart(pl.DataFrame(_rows_g))
+        .mark_rect(cornerRadius=2, stroke="#07080f", strokeWidth=1, cursor="pointer")
+        .encode(
+            x=alt.X("head:O", title="Head",
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8",
+                                  labelFontSize=9 if N_HEADS > 16 else 10)),
+            y=alt.Y("layer:O", title="Layer",
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8",
+                                  labelFontSize=9 if N_LAYERS > 24 else 10)),
+            color=alt.Color("sink:Q",
+                scale=alt.Scale(scheme="orangered", domain=[0, 1]),
+                legend=alt.Legend(title="Attn → BOS", labelColor="#94a3b8", titleColor="#94a3b8")),
+            tooltip=[alt.Tooltip("layer:O"), alt.Tooltip("head:O"),
+                     alt.Tooltip("sink:Q", title="BOS attn", format=".3f")],
+        )
+        .properties(
+            width=_cw_g * N_HEADS, height=_ch_g * N_LAYERS,
+            title=alt.TitleParams(
+                text=f"Click a head to drill in — {N_LAYERS}×{N_HEADS} grid, live on your text",
+                color="#e2e8f0", fontSize=12),
+        )
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+    sink_grid = mo.ui.altair_chart(_grid_g, chart_selection="point", legend_selection=False)
 
-          function scoreColor(s) {
-            const r = Math.round(s * 245 + (1-s) * 28);
-            const g = Math.round(s * 158 + (1-s) * 14);
-            const b = Math.round(s *  11 + (1-s) * 80);
-            return `rgb(${r},${g},${b})`;
-          }
-
-          function redraw() {
-            const sc   = model.get("sink_scores");
-            const selL = model.get("sel_layer");
-            const selH = model.get("sel_head");
-            const CW = 36, CH = 22, GAP = 3, LBL = 36, BOT = 22;
-            const svgW = LBL + NH * (CW + GAP);
-            const svgH = NL * (CH + GAP) + BOT;
-
-            let s = "";
-            for (let l = 0; l < NL; l++) {
-              for (let h = 0; h < NH; h++) {
-                const v   = sc[l * NH + h] || 0;
-                const x   = LBL + h * (CW + GAP);
-                const y   = l * (CH + GAP);
-                const sel = (l === selL && h === selH);
-                s += `<rect x="${x}" y="${y}" width="${CW}" height="${CH}" rx="3"
-                  fill="${scoreColor(v)}"
-                  stroke="${sel ? "#f8fafc" : "#07080f"}" stroke-width="${sel ? 2 : 0.5}"
-                  style="cursor:pointer" data-l="${l}" data-h="${h}">
-                  <title>L${l} H${h}: ${(v*100).toFixed(1)}% → BOS</title></rect>`;
-              }
-              s += `<text x="${LBL-4}" y="${l*(CH+GAP)+CH/2+4}"
-                text-anchor="end" font-size="9" fill="#94a3b8"
-                font-family="JetBrains Mono">L${l}</text>`;
-            }
-            for (let h = 0; h < NH; h++) {
-              s += `<text x="${LBL + h*(CW+GAP) + CW/2}" y="${svgH - 5}"
-                text-anchor="middle" font-size="9" fill="#94a3b8"
-                font-family="JetBrains Mono">H${h}</text>`;
-            }
-            const lx = svgW - 105, ly = NL*(CH+GAP) - 28;
-            s += `<defs><linearGradient id="lg"><stop offset="0%" stop-color="rgb(28,14,80)"/>
-              <stop offset="100%" stop-color="rgb(245,158,11)"/></linearGradient></defs>
-              <rect x="${lx}" y="${ly}" width="90" height="11" rx="3" fill="url(#lg)"/>
-              <text x="${lx}" y="${ly+22}" font-size="8" fill="#94a3b8">0%</text>
-              <text x="${lx+90}" y="${ly+22}" text-anchor="end" font-size="8" fill="#94a3b8">100%</text>
-              <text x="${lx+45}" y="${ly-3}" text-anchor="middle" font-size="8" fill="#94a3b8">BOS attention</text>`;
-
-            // Container scales with the actual grid size (up to XL's 25x48) instead of
-            // squeezing every model into a fixed 640px box, so cells stay readable.
-            const boxW = Math.max(640, svgW + 32);
-            el.innerHTML = `<div style="background:#0d1220;border:1px solid #1e2d47;border-radius:10px;padding:16px;max-width:${boxW}px;margin:0 auto">
-              <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}"
-                style="display:block;margin:0 auto;max-width:100%;height:auto">${s}</svg></div>`;
-
-            const toks  = model.get("tokens");
-            const strip = document.createElement("div");
-            strip.style.cssText = `font-size:11px;font-family:JetBrains Mono;margin-top:10px;line-height:2.2;max-width:${boxW}px;margin-left:auto;margin-right:auto`;
-            strip.innerHTML = toks.map((t,i) => i===0
-              ? `<span style="background:#78350f;color:#fcd34d;padding:1px 6px;border-radius:3px;margin:2px">${t}</span>`
-              : `<span style="background:#0f1729;color:#94a3b8;padding:1px 5px;border-radius:3px;margin:2px">${t}</span>`
-            ).join("");
-            el.appendChild(strip);
-
-            el.querySelector("svg").addEventListener("click", e => {
-              const r = e.target.closest("rect[data-l]");
-              if (!r) return;
-              model.set("sel_layer", parseInt(r.dataset.l));
-              model.set("sel_head",  parseInt(r.dataset.h));
-              model.save_changes();
-            });
-          }
-
-          redraw();
-          model.on("change:sink_scores", redraw);
-          model.on("change:tokens",      redraw);
-          model.on("change:sel_layer",   redraw);
-          model.on("change:sel_head",    redraw);
-        }
-        export default { render };
-        """
-        sink_scores = traitlets.List([]).tag(sync=True)
-        tokens      = traitlets.List([]).tag(sync=True)
-        n_layers    = traitlets.Int(12).tag(sync=True)
-        n_heads     = traitlets.Int(12).tag(sync=True)
-        sel_layer   = traitlets.Int(-1).tag(sync=True)
-        sel_head    = traitlets.Int(-1).tag(sync=True)
-    return (SinkMapWidget,)
+    _chips_g = "".join(
+        ('<span style="background:#78350f;color:#fcd34d;padding:1px 6px;border-radius:3px;margin:2px;display:inline-block">'
+         if _i_g == 0 else
+         '<span style="background:#0f1729;color:#94a3b8;padding:1px 5px;border-radius:3px;margin:2px;display:inline-block">')
+        + _html_g.escape(_t_g) + "</span>"
+        for _i_g, _t_g in enumerate(tokens_live)
+    )
+    mo.vstack([
+        sink_grid,
+        mo.Html(f'<div style="font-size:11px;font-family:JetBrains Mono,monospace;line-height:2.2;max-width:44rem;margin:6px auto 0">{_chips_g}</div>'),
+    ], align="center")
+    return (sink_grid,)
 
 
 @app.cell
-def _(N_HEADS, N_LAYERS, SinkMapWidget, mo, sink_scores_live, tokens_live):
-    sink_widget = mo.ui.anywidget(SinkMapWidget(
-        sink_scores=sink_scores_live.flatten().tolist(),
-        tokens=tokens_live,
-        n_layers=N_LAYERS,
-        n_heads=N_HEADS,
-    ))
-    mo.hstack([sink_widget], justify="center")
-    return (sink_widget,)
-
-
-@app.cell
-def _(alt, attn_live, mo, pl, sink_widget, tokens_live):
-    _state = sink_widget.value
-    _sl = int(_state.get("sel_layer", -1))
-    _sh = int(_state.get("sel_head", -1))
-    if _sl < 0:
+def _(alt, attn_live, mo, pl, sink_grid, tokens_live):
+    _sel_g = sink_grid.value
+    try:
+        _sel_rows_g = _sel_g.to_dicts()          # polars
+    except AttributeError:
+        try:
+            _sel_rows_g = _sel_g.to_dict("records")   # pandas fallback
+        except Exception:
+            _sel_rows_g = []
+    _sl = int(_sel_rows_g[0]["li"]) if _sel_rows_g else -1
+    _sh = int(_sel_rows_g[0]["hi"]) if _sel_rows_g else -1
+    # Guard against a stale selection surviving a model switch (grid size changed).
+    if not (0 <= _sl < attn_live.shape[0] and 0 <= _sh < attn_live.shape[1]):
         _drill = mo.md("*Click any cell in the grid above to inspect that head's full attention matrix.*")
     else:
         _T2   = len(tokens_live)
