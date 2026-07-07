@@ -725,6 +725,152 @@ def _(mo):
     return
 
 
+# ── Live Figure 2: perturbation spread, measured ──────────────────────────────
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Now Measure It: Figure 2, Live on GPT-2
+
+    The simulation above is a cartoon. The paper's actual evidence is **Figure 2**: perturb one
+    word in a prompt, run the model twice, and map how far the disturbance spreads through
+    every layer and token — with and without the attention sink.
+
+    The paper could ablate the sink in Gemma 7B by deleting ⟨BOS⟩, because Gemma was trained
+    with a fixed ⟨BOS⟩ and is brittle without it. **GPT-2 refuses that ablation** — it was
+    trained without a fixed BOS, and exactly as the paper's §5 packing experiments predict,
+    its sink simply re-forms on whatever token comes first (we measure this below). So we use
+    a *sharper* intervention the paper never runs: keep the sequence identical, but **mask
+    position 0 out of attention**, so no head can reach the sink at all.
+
+    Prompt: the paper's own Shakespeare paragraph (Appendix C.1), swapping **"greatest"** for a
+    same-token-count substitute. Each heatmap cell is ‖h(original) − h(perturbed)‖₂ for one
+    token at one layer. All six sequences run as **two batched GPU forward passes**.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    perturb_pick = mo.ui.dropdown(
+        options=["best", "worst", "finest"], value="best",
+        label='Replace "greatest" with',
+    )
+    perturb_pick
+    return (perturb_pick,)
+
+
+@app.cell
+def _(BOS_ID, alt, mo, model, perturb_pick, pl, tokenizer, torch):
+    # Live reproduction of paper Figure 2 (§3.2). Two batched forwards:
+    # [original, perturbed] with BOS and without. The perturbed word is chosen to
+    # tokenize to the same number of GPT-2 tokens as ' greatest', so positions align.
+    import time as _t_p
+    _SHAKE = ("William Shakespeare was an English playwright, poet and actor. "
+              "He is widely regarded as the greatest writer in the English language and "
+              "the world's pre-eminent dramatist. He is often called England's national "
+              "poet and the Bard of Avon. His extant works, including collaborations, "
+              "consist of some 39 plays, 154 sonnets, and three long narrative poems.")
+    _orig_p = tokenizer.encode(_SHAKE, add_special_tokens=False)
+    _pert_txt = _SHAKE.replace("greatest", perturb_pick.value)
+    _pert_p = tokenizer.encode(_pert_txt, add_special_tokens=False)
+    assert len(_orig_p) == len(_pert_p), "substitute must keep token count fixed"
+    _pidx = next(i for i, (a, b) in enumerate(zip(_orig_p, _pert_p)) if a != b)
+
+    _t0_p = _t_p.perf_counter()
+    if model.device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
+    # Forward 1 (batch of 4): [orig, pert] with the sink attendable, and the SAME
+    # sequences with position 0 masked out of attention (per-row attention_mask) —
+    # the causal ablation. Forward 2 (batch of 2): bare text, to show the sink relocating.
+    _b4 = torch.tensor([[BOS_ID] + _orig_p, [BOS_ID] + _pert_p,
+                        [BOS_ID] + _orig_p, [BOS_ID] + _pert_p], device=model.device)
+    _am4 = torch.ones_like(_b4)
+    _am4[2:, 0] = 0                                  # rows 2-3: sink unreachable
+    with torch.no_grad():
+        _o4 = model(_b4, attention_mask=_am4, output_hidden_states=True,
+                    output_attentions=True)
+    _hs4 = torch.stack(_o4.hidden_states)            # [L+1, 4, T, d]
+    _d_sink = (_hs4[:, 0] - _hs4[:, 1]).norm(dim=-1)[:, 1:]   # content cols only
+    _d_mask = (_hs4[:, 2] - _hs4[:, 3]).norm(dim=-1)[:, 1:]
+    _sink_score_eot = float(torch.stack(_o4.attentions)[:, 0, :, :, 0].mean().item())
+
+    _b2 = torch.tensor([_orig_p, _pert_p], device=model.device)
+    with torch.no_grad():
+        _o2 = model(_b2, output_attentions=True)
+    _sink_score_bare = float(torch.stack(_o2.attentions)[:, 0, :, :, 0].mean().item())
+    _dt_p = _t_p.perf_counter() - _t0_p
+    _d_bos, _d_no = _d_sink, _d_mask
+
+    _Lp1, _Tp = _d_bos.shape
+    _vmax = float(torch.maximum(_d_bos.max(), _d_no.max()).item())
+
+    def _heat(dm, label):
+        _r = [{"tok": t, "layer": l, "diff": float(dm[l, t])}
+              for l in range(_Lp1) for t in range(_Tp)]
+        return (
+            alt.Chart(pl.DataFrame(_r))
+            .mark_rect()
+            .encode(
+                x=alt.X("tok:O", title="Token position", axis=alt.Axis(
+                    labelColor="#94a3b8", titleColor="#94a3b8", values=list(range(0, _Tp, 10)))),
+                y=alt.Y("layer:O", title="Layer", sort="descending", axis=alt.Axis(
+                    labelColor="#94a3b8", titleColor="#94a3b8")),
+                color=alt.Color("diff:Q", scale=alt.Scale(scheme="inferno", domain=[0, _vmax]),
+                    legend=alt.Legend(title="‖Δh‖", labelColor="#94a3b8", titleColor="#94a3b8")),
+                tooltip=[alt.Tooltip("tok:O"), alt.Tooltip("layer:O"),
+                         alt.Tooltip("diff:Q", format=".2f")],
+            )
+            .properties(width=430, height=200, title=alt.TitleParams(
+                text=label, color="#e2e8f0", fontSize=12))
+        )
+
+    _chart_p = (
+        alt.vconcat(
+            _heat(_d_no,  f"Sink MASKED (no head can reach position 0) — perturbation at token {_pidx} spreads"),
+            _heat(_d_bos, "Sink attendable — the no-op dampens the spread"),
+        )
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+
+    # Spread = mean disturbance at the final layer over tokens *after* the perturbed one
+    # (excluding it), i.e. how much collateral damage the swap causes downstream.
+    _sp_no  = float(_d_no[-1, _pidx + 1:].mean().item())
+    _sp_bos = float(_d_bos[-1, _pidx + 1:].mean().item())
+    _ratio_p = _sp_no / max(_sp_bos, 1e-9)
+    _gpu_p = ""
+    if model.device.type == "cuda":
+        _gpu_p = f" · peak VRAM {torch.cuda.max_memory_allocated()/1e9:.2f} GB"
+    _claim_p = (
+        f"blocking the sink amplifies collateral spread **{_ratio_p:.1f}×** on this prompt. "
+        "This is the paper's Figure 2 mechanism, isolated causally: same tokens, same weights, "
+        "only the sink's reachability changed — and without it, a one-word edit rewrites every "
+        "downstream representation."
+        if _ratio_p > 1.05 else
+        f"on this substitute the two conditions are close (ratio {_ratio_p:.2f}×) — the paper's "
+        "effect is a tendency, not a law; try another word."
+    )
+    mo.vstack([
+        _chart_p,
+        mo.md(
+            f'Swapping "greatest" → "{perturb_pick.value}" (token {_pidx}) disturbs the '
+            f"**downstream** final-layer states by **{_sp_bos:.1f}** on average with the sink "
+            f"attendable, vs **{_sp_no:.1f}** with position 0 masked — {_claim_p}"),
+        mo.md(
+            f"**And the §5 control:** simply *deleting* the first token doesn't work as an "
+            f"ablation here. With `<|endoftext|>` prepended, {_sink_score_eot:.0%} of all "
+            f"attention lands on position 0; strip it and **{_sink_score_bare:.0%}** still "
+            f'lands on position 0 — now the word "{tokenizer.decode([_orig_p[0]]).strip()}". '
+            "GPT-2 was trained without a fixed BOS, and exactly as the paper's Table 2 "
+            "predicts, its sink is **positional, not lexical**: it re-forms on whatever comes "
+            f"first. That is why the mask intervention above is the honest ablation. "
+            f"({_dt_p:.2f}s, 6 sequences in 2 batched passes{_gpu_p}.)"),
+    ], align="center")
+    return
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ACT III: THE MATHEMATICS — THEOREM 3.2
 # ══════════════════════════════════════════════════════════════════════════════
@@ -978,9 +1124,11 @@ def _(mo):
 
 
 @app.cell
-def _(AutoModelForCausalLM, AutoTokenizer, alt, mo, pl, text_input, torch):
+def _(AutoModelForCausalLM, AutoTokenizer, alt, mo, pl, torch):
     # Auto-runs on load: loads GPT-2 Small → Medium → Large → XL sequentially,
-    # measuring each, freeing GPU memory between models. Re-runs when the text changes.
+    # measuring each, freeing GPU memory between models. Uses a fixed probe
+    # prompt (not the live text box) so editing text above never re-triggers
+    # four model loads. fp16 on GPU only — fp16 on CPU is slow and fragile.
     import time as _time
     _variants = [
         ("gpt2",        "Small (124M)",  124,  12),
@@ -989,8 +1137,12 @@ def _(AutoModelForCausalLM, AutoTokenizer, alt, mo, pl, text_input, torch):
         ("gpt2-xl",     "XL (1.5B)",    1558,  48),
     ]
     _dev_s = "cuda" if torch.cuda.is_available() else "cpu"
+    _dtype_s = torch.float16 if _dev_s == "cuda" else torch.float32
     _tok_s = AutoTokenizer.from_pretrained("gpt2")
-    _raw_s = _tok_s.encode(text_input.value, add_special_tokens=False)
+    _probe_s = ("William Shakespeare was an English playwright, poet and actor. "
+                "He is widely regarded as the greatest writer in the English language "
+                "and the world's pre-eminent dramatist.")
+    _raw_s = _tok_s.encode(_probe_s, add_special_tokens=False)
     _bos_s = _tok_s.bos_token_id
     _ids_s = torch.tensor([[_bos_s] + _raw_s], device=_dev_s)
 
@@ -1000,7 +1152,7 @@ def _(AutoModelForCausalLM, AutoTokenizer, alt, mo, pl, text_input, torch):
     for _mid_s, _tag_s, _params_s, _nl_s in _variants:
         _t0_s = _time.perf_counter()
         _m_s = AutoModelForCausalLM.from_pretrained(
-            _mid_s, attn_implementation="eager", dtype=torch.float16,
+            _mid_s, attn_implementation="eager", dtype=_dtype_s,
         ).to(_dev_s).eval()
         with torch.no_grad():
             _out_s = _m_s(_ids_s, output_attentions=True)
@@ -1080,6 +1232,124 @@ def _(AutoModelForCausalLM, AutoTokenizer, alt, mo, pl, text_input, torch):
     return
 
 
+# ── Batched Sink Census (paper's multi-prompt methodology) ────────────────────
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### The Sink Census: 24 Domains, One Batched Pass
+
+    A single sentence is one sample. The paper measures its sink metric over **170 prompts
+    spanning many domains** (Appendix C.3) — medical abstracts, legal boilerplate, IRC chat
+    logs, HTML — because a sink that only shows up on tidy English prose would be a curiosity,
+    not a mechanism.
+
+    We run the same census on GPT-2: 24 prompts from 24 different text domains, truncated to
+    the paper's T = 64 tokens, executed as **one padded, masked, batched forward pass** on the
+    GPU. For each head we get the mean sink score across domains — and, more telling, the
+    *standard deviation*: a structural sink should hold across every domain.
+    """)
+    return
+
+
+@app.cell
+def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, pl, tokenizer, torch):
+    # 24-domain census, one batched forward (paper Appendix C.3 methodology, T=64).
+    import time as _t_c
+    _CENSUS = [
+        "The mitochondrion is a double-membrane-bound organelle found in most eukaryotic organisms, generating most of the cell's supply of adenosine triphosphate.",
+        "def quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[0]\n    return quicksort([x for x in arr[1:] if x < pivot]) + [pivot]",
+        "WHEREAS, the Parties desire to enter into this Agreement to set forth the terms and conditions of their business relationship, NOW THEREFORE, in consideration of the mutual covenants herein,",
+        "<ikt> hi all :)\n<gggs> hey ikt\n<ikt> thinking of setting up an LDAP server at home\n<gggs> nice, what distro?",
+        "Preheat the oven to 220C. Toss the potatoes in olive oil, salt, and rosemary, then roast for 45 minutes, turning once, until golden and crisp at the edges.",
+        "In the third quarter, the company reported revenue of $2.4 billion, up 12% year over year, driven primarily by growth in its cloud services segment.",
+        "Shall I compare thee to a summer's day? Thou art more lovely and more temperate: Rough winds do shake the darling buds of May,",
+        "The defendant appeared before the court on charges of breach of contract. Counsel for the plaintiff argued that damages should include lost profits.",
+        "BREAKING: Officials confirmed Tuesday that the wildfire burning north of the city has been 60 percent contained, allowing some evacuation orders to be lifted.",
+        "To install the package, run pip install transformers in your terminal. Then import the library and load a pretrained model using the from_pretrained method.",
+        "The patient presented with acute chest pain radiating to the left arm, diaphoresis, and shortness of breath. ECG revealed ST-segment elevation in leads II, III, and aVF.",
+        "Once upon a time, in a village at the edge of a great forest, there lived a woodcutter and his two children, Hansel and Gretel.",
+        "The Treaty of Westphalia, signed in 1648, ended the Thirty Years' War and established the principle of state sovereignty that underpins the modern international order.",
+        "Q: How do I reset my password? A: Click 'Forgot password' on the login page, enter your email address, and follow the link we send you within 15 minutes.",
+        "E4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Na5",
+        "Dear Hiring Manager, I am writing to express my interest in the Senior Data Engineer position posted on your careers page. I have eight years of experience building pipelines.",
+        "The GDP deflator differs from the consumer price index in that it measures the prices of all domestically produced goods, not just a fixed basket of consumer items.",
+        "Verse 1: City lights are fading out the rearview mirror glow / Every mile a memory of a place I used to know / Chorus: And I'm gone, gone, gone",
+        "SELECT customer_id, SUM(order_total) AS lifetime_value FROM orders WHERE order_date >= '2024-01-01' GROUP BY customer_id HAVING SUM(order_total) > 1000 ORDER BY lifetime_value DESC;",
+        "Water boils at 100 degrees Celsius at sea level, but at higher altitudes the reduced atmospheric pressure lowers the boiling point by roughly one degree per 300 meters.",
+        "In the 87th minute, the substitute striker latched onto a through ball, rounded the keeper, and slotted home the winner to send the home crowd into raptures.",
+        "aujourd'hui maman est morte. Ou peut-etre hier, je ne sais pas. J'ai recu un telegramme de l'asile: mere decedee, enterrement demain.",
+        "The forecast for Thursday calls for morning fog giving way to partly sunny skies, with highs near 18 degrees and a 30 percent chance of showers after dark.",
+        "Renaissance perspective, first formalized by Brunelleschi around 1415, allowed painters to construct convincing three-dimensional space on a flat surface using a single vanishing point.",
+    ]
+    _T_CENSUS = 64  # paper measures the sink on the first 64 tokens (Appendix C.3)
+    _t0_c = _t_c.perf_counter()
+    if model.device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
+    _seqs_c = [[BOS_ID] + tokenizer.encode(t, add_special_tokens=False)[: _T_CENSUS - 1]
+               for t in _CENSUS]
+    _Tm_c = max(len(s) for s in _seqs_c)
+    _pad_c = tokenizer.eos_token_id
+    _ids_c = torch.tensor([s + [_pad_c] * (_Tm_c - len(s)) for s in _seqs_c], device=model.device)
+    _mask_c = torch.tensor([[1] * len(s) + [0] * (_Tm_c - len(s)) for s in _seqs_c],
+                           device=model.device)
+    with torch.no_grad():
+        _out_c = model(_ids_c, attention_mask=_mask_c, output_attentions=True)
+    _A_c = torch.stack(_out_c.attentions)              # [L, B, H, T, T]
+    _col0_c = _A_c[..., 0]                             # [L, B, H, T]
+    _mf_c = _mask_c.float()
+    _sink_c = (_col0_c * _mf_c[None, :, None, :]).sum(-1) / _mf_c.sum(-1)[None, :, None]
+    _mean_c = _sink_c.mean(dim=1)                      # [L, H] mean over prompts
+    _std_c  = _sink_c.std(dim=1)                       # [L, H]
+    _dt_c = _t_c.perf_counter() - _t0_c
+
+    _rows_c = [
+        {"layer": f"L{l:02d}", "head": f"H{h:02d}",
+         "mean": float(_mean_c[l, h]), "std": float(_std_c[l, h])}
+        for l in range(N_LAYERS) for h in range(N_HEADS)
+    ]
+    _df_c2 = pl.DataFrame(_rows_c)
+    _n_sink_c = _df_c2.filter(pl.col("mean") > 0.3).height
+    _stable_c = _df_c2.filter((pl.col("mean") > 0.3) & (pl.col("std") < 0.1)).height
+
+    _hm_c = (
+        alt.Chart(_df_c2)
+        .mark_rect(cornerRadius=2, stroke="#07080f", strokeWidth=1)
+        .encode(
+            x=alt.X("head:O", title="Head",
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            y=alt.Y("layer:O", title="Layer", sort="descending",
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            color=alt.Color("mean:Q", scale=alt.Scale(scheme="orangered", domain=[0, 1]),
+                legend=alt.Legend(title="Mean sink", labelColor="#94a3b8", titleColor="#94a3b8")),
+            tooltip=[alt.Tooltip("layer:O"), alt.Tooltip("head:O"),
+                     alt.Tooltip("mean:Q", format=".3f", title="Mean over 24 domains"),
+                     alt.Tooltip("std:Q", format=".3f", title="Std over 24 domains")],
+        )
+        .properties(width=440, height=290, title=alt.TitleParams(
+            text=f"Sink census over 24 domains — {_n_sink_c}/144 heads sink on average (ε=0.3)",
+            color="#e2e8f0", fontSize=12))
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+    _gpu_c = ""
+    if model.device.type == "cuda":
+        _gpu_c = f" · peak VRAM {torch.cuda.max_memory_allocated()/1e9:.2f} GB"
+    _tok_total_c = int(_mf_c.sum().item())
+    mo.vstack([
+        _hm_c,
+        mo.md(
+            f"**{_n_sink_c}/144 heads** are sinks *on average* across code, French, chess "
+            f"notation, SQL, poetry, and medical text — and **{_stable_c}** of them hold with a "
+            f"cross-domain std below 0.10. The sink is not a quirk of any text type; it is "
+            f"structural, exactly what the over-mixing account requires (a defence mechanism "
+            f"can't be domain-dependent). Census: {_tok_total_c} tokens across 24 prompts in "
+            f"**one batched forward** ({_dt_c:.2f}s{_gpu_c})."),
+    ], align="center")
+    return
+
+
 # ── The No-Op Mechanism and the Apostrophe Head ────────────────────────────
 
 @app.cell(hide_code=True)
@@ -1113,10 +1383,187 @@ def _(mo):
     previous token is a literal apostrophe: contractions like `I'm`, possessives, quoted text,
     any of it. No apostrophe in sight, and it costs nothing. Dormant behind the sink.
 
-    **Try it:** type `it's a cat` in the text box above, then use the head explorer below to
-    click L00/H10. Then type `it is a cat` and compare: the BOS column lights up when no
-    apostrophe is present.
+    That specific head lives in Gemma 7B. Does GPT-2 have if-else heads of its own?
+    Rather than take it on faith, the **mode-switch finder** below measures it: give it two
+    texts — one with a trigger feature, one without — and it ranks all 144 heads by how much
+    their BOS routing *changes* between the two. Heads that stay put are static sinks or
+    static workers; heads that jump are conditional if-else heads, caught in the act.
     """)
+    return
+
+
+@app.cell
+def _(mo):
+    switch_text_a = mo.ui.text(
+        value="it's a cat and it's a dog and that's that",
+        label="Text A (trigger present)", full_width=True,
+    )
+    switch_text_b = mo.ui.text(
+        value="it is a cat and it is a dog and that is that",
+        label="Text B (trigger absent)", full_width=True,
+    )
+    mo.vstack([switch_text_a, switch_text_b])
+    return switch_text_a, switch_text_b
+
+
+@app.cell
+def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, pl, switch_text_a, switch_text_b, tokenizer, torch):
+    # Mode-switch finder: one padded, batched forward for both texts, then per-head
+    # |Δ BOS attention| between conditions. A large Δ means the head conditions its
+    # sink behaviour on content — the paper's 'if-else' mechanism (§3.2), measured
+    # across the whole grid instead of asserted for one hand-picked head.
+    _ra = tokenizer.encode(switch_text_a.value, add_special_tokens=False)
+    _rb = tokenizer.encode(switch_text_b.value, add_special_tokens=False)
+    _Tmax = max(len(_ra), len(_rb)) + 1
+    _pad = tokenizer.eos_token_id
+    _ids_ms = torch.tensor([
+        [BOS_ID] + _ra + [_pad] * (_Tmax - 1 - len(_ra)),
+        [BOS_ID] + _rb + [_pad] * (_Tmax - 1 - len(_rb)),
+    ], device=model.device)
+    _mask_ms = torch.tensor([
+        [1] * (1 + len(_ra)) + [0] * (_Tmax - 1 - len(_ra)),
+        [1] * (1 + len(_rb)) + [0] * (_Tmax - 1 - len(_rb)),
+    ], device=model.device)
+    with torch.no_grad():
+        _out_ms = model(_ids_ms, attention_mask=_mask_ms, output_attentions=True)
+    _A_ms = torch.stack(_out_ms.attentions)          # [L, 2, H, T, T]
+    _col0 = _A_ms[:, :, :, :, 0]                     # [L, 2, H, T] attn → BOS
+    _m = _mask_ms.float()                            # [2, T]
+    _sink_ab = (_col0 * _m[None, :, None, :]).sum(-1) / _m.sum(-1)[None, :, None]  # [L, 2, H]
+    _sa, _sb = _sink_ab[:, 0], _sink_ab[:, 1]        # [L, H] each
+
+    _rows_ms = [
+        {"label": f"L{l}·H{h}", "A": float(_sa[l, h]), "B": float(_sb[l, h]),
+         "delta": float(_sa[l, h] - _sb[l, h])}
+        for l in range(N_LAYERS) for h in range(N_HEADS)
+    ]
+    _df_ms = pl.DataFrame(_rows_ms).with_columns(pl.col("delta").abs().alias("absd"))
+    _top_ms = _df_ms.sort("absd", descending=True).head(5)
+
+    _sc_ms = (
+        alt.Chart(_df_ms)
+        .mark_circle(size=70, opacity=0.85, stroke="#07080f", strokeWidth=0.5)
+        .encode(
+            x=alt.X("B:Q", title="BOS attention — Text B (trigger absent)",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            y=alt.Y("A:Q", title="BOS attention — Text A (trigger present)",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            color=alt.Color("absd:Q", scale=alt.Scale(scheme="plasma"),
+                legend=alt.Legend(title="|Δ|", labelColor="#94a3b8", titleColor="#94a3b8")),
+            tooltip=[alt.Tooltip("label:N", title="Head"),
+                     alt.Tooltip("A:Q", format=".3f"), alt.Tooltip("B:Q", format=".3f"),
+                     alt.Tooltip("delta:Q", format="+.3f", title="Δ (A−B)")],
+        )
+        .properties(width=380, height=340,
+            title=alt.TitleParams(
+                text="Mode-switch map: heads off the diagonal condition their sink on content",
+                color="#e2e8f0", fontSize=12))
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+    _tbl_ms = " · ".join(
+        f"**{r['label']}** ({r['delta']:+.2f})" for r in _top_ms.iter_rows(named=True)
+    )
+    _biggest = _top_ms.row(0, named=True)
+    mo.vstack([
+        _sc_ms,
+        mo.md(
+            f"Heads on the diagonal treat both texts identically. The biggest mode-switchers on "
+            f"this pair: {_tbl_ms}. Head **{_biggest['label']}** shifts its BOS routing by "
+            f"**{_biggest['delta']:+.2f}** between conditions — GPT-2's closest analogue of the "
+            "Gemma apostrophe head. Edit the two texts to hunt for other triggers "
+            "(digits, quotes, code, a second language). Both texts run as one batched forward pass."),
+    ], align="center")
+    return
+
+
+# ── Value-Norm Verification: the no-op, measured ──────────────────────────────
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Verifying the No-Op: Value Norms Across All 144 Heads
+
+    The no-op story has a testable second half. Routing attention to BOS only *nullifies* a
+    head if the BOS **value vector** it attends to has near-zero norm — otherwise the head
+    would inject BOS's content everywhere. The paper verifies this for one Gemma head
+    (Figure 4b). Here we check it for **every GPT-2 head at once**, on your text.
+
+    For each head we compute the ratio ‖v_BOS‖ / mean‖v_content‖ from the actual per-head
+    value projections, and plot it against that head's sink score. If the mechanism is real,
+    strong sinks should sit at low ratios — attending hard to a value that says nothing.
+    """)
+    return
+
+
+@app.cell
+def _(BOS_ID, N_HEADS, N_LAYERS, alt, mo, model, np, pl, sink_scores_live, text_input, tokenizer, torch):
+    # Recompute the per-head value vectors exactly as each block does: ln_1 → c_attn,
+    # take the V third, split into heads. hidden_states[l] is the input to block l.
+    _raw_v = tokenizer.encode(text_input.value, add_special_tokens=False)
+    _ids_v = torch.tensor([[BOS_ID] + _raw_v], device=model.device)
+    with torch.no_grad():
+        _out_v = model(_ids_v, output_hidden_states=True)
+    _hs_v = _out_v.hidden_states                       # tuple of L+1 × [1, T, d]
+    _d_model = model.config.n_embd
+    _dh = _d_model // N_HEADS
+
+    _ratio_v = np.zeros((N_LAYERS, N_HEADS))
+    for _l in range(N_LAYERS):
+        _blk = model.transformer.h[_l]
+        with torch.no_grad():
+            _qkv = _blk.attn.c_attn(_blk.ln_1(_hs_v[_l]))[0]     # [T, 3d]
+        _vals = _qkv[:, 2 * _d_model:].view(-1, N_HEADS, _dh)     # [T, H, dh]
+        _norms = _vals.norm(dim=-1)                               # [T, H]
+        _ratio_v[_l] = (_norms[0] / (_norms[1:].mean(dim=0) + 1e-8)).cpu().numpy()
+
+    _sink_np = sink_scores_live.cpu().numpy()
+    _rows_v = [
+        {"label": f"L{l}·H{h}", "sink": float(_sink_np[l, h]),
+         "ratio": float(_ratio_v[l, h]),
+         "type": "Sink (>30% → BOS)" if _sink_np[l, h] > 0.3 else "Normal"}
+        for l in range(N_LAYERS) for h in range(N_HEADS)
+    ]
+    _r_v = float(np.corrcoef(_sink_np.flatten(), _ratio_v.flatten())[0, 1])
+
+    _sc_v = (
+        alt.Chart(pl.DataFrame(_rows_v))
+        .mark_circle(size=75, opacity=0.85, stroke="#07080f", strokeWidth=0.5)
+        .encode(
+            x=alt.X("sink:Q", title="Sink score (mean attention → BOS)",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            y=alt.Y("ratio:Q", title="‖v_BOS‖ / mean ‖v_content‖",
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            color=alt.Color("type:N",
+                scale=alt.Scale(domain=["Sink (>30% → BOS)", "Normal"],
+                                range=["#f59e0b", "#7dd3fc"]),
+                legend=alt.Legend(title="Head type", labelColor="#94a3b8", titleColor="#94a3b8")),
+            tooltip=[alt.Tooltip("label:N", title="Head"),
+                     alt.Tooltip("sink:Q", format=".3f"),
+                     alt.Tooltip("ratio:Q", format=".3f", title="BOS value ratio")],
+        )
+        .properties(width=430, height=290, title=alt.TitleParams(
+            text=f"BOS value norm vs sink strength, all 144 heads — Pearson r = {_r_v:+.2f}",
+            color="#e2e8f0", fontSize=12))
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+    _read_v = (
+        f"the stronger a head sinks, the *smaller* the value vector it drinks from "
+        f"(r = {_r_v:+.2f}). Attending to BOS really is attending to nothing — the "
+        "no-op is implemented in the values, not just the attention pattern. The paper "
+        "showed this for one Gemma head; it holds across GPT-2's whole grid."
+        if _r_v < -0.15 else
+        f"on this text the correlation is weak (r = {_r_v:+.2f}) — GPT-2's heads separate "
+        "less cleanly than Gemma's single studied head. Try longer or more varied text."
+    )
+    mo.vstack([
+        _sc_v,
+        mo.md(f"Live measurement of the paper's Figure 4b claim, extended to all heads: {_read_v}"),
+    ], align="center")
     return
 
 
@@ -1654,35 +2101,51 @@ def _(mo):
 @app.cell
 def _(BOS_ID, alt, len_max_slider, mo, model, pl, text_input, tokenizer, torch):
     # Content-only μ (see the collapse cell): compares the SAME content tokens with vs
-    # without a leading BOS at each length. Auto-runs; re-runs on slider / text change.
+    # without a leading BOS at each length. All (length × condition) sequences run as ONE
+    # padded, masked batch through the transformer body — model.transformer skips the
+    # 50k-vocab LM head, whose logits we never use. Re-runs on slider / text change.
+    import time as _t_cl
     _base_cl = tokenizer.encode(text_input.value, add_special_tokens=False)
     _max_cl  = min(len_max_slider.value, 1023)   # GPT-2 max pos = 1024 total tokens
     _rep_cl  = (_base_cl * ((_max_cl // max(len(_base_cl), 1)) + 2))[:_max_cl]
     _lens_cl = [l for l in [32, 64, 128, 256, 384, 512, 640, 768, 896, 960] if l <= _max_cl]
 
-    def _mu_cl(ids_list, n_content):
-        _t = torch.tensor([ids_list], device=model.device)
-        with torch.no_grad():
-            _o = model(_t, output_hidden_states=True)
-        _h = _o.hidden_states[-1][0][-n_content:]
-        _T = _h.shape[0]
+    _t0_cl = _t_cl.perf_counter()
+    if model.device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+    _seqs_cl = []
+    for _L_cl in _lens_cl:
+        _seqs_cl.append([BOS_ID] + _rep_cl[:_L_cl])   # with BOS: content at rows 1..L
+        _seqs_cl.append(_rep_cl[:_L_cl])              # without:  content at rows 0..L-1
+    _Tm_cl = max(len(s) for s in _seqs_cl)
+    _ids_cl = torch.tensor(
+        [s + [tokenizer.eos_token_id] * (_Tm_cl - len(s)) for s in _seqs_cl],
+        device=model.device)
+    _mask_cl = torch.tensor(
+        [[1] * len(s) + [0] * (_Tm_cl - len(s)) for s in _seqs_cl], device=model.device)
+    with torch.no_grad():
+        _H_cl = model.transformer(_ids_cl, attention_mask=_mask_cl).last_hidden_state
+
+    def _mu_rows(h):
+        _T = h.shape[0]
         if _T < 2:
             return 0.0
-        _n = _h / (_h.norm(dim=-1, keepdim=True) + 1e-8)
+        _n = h / (h.norm(dim=-1, keepdim=True) + 1e-8)
         _s = _n @ _n.T
         return float(1 - _s.triu(diagonal=1).sum().item() / (_T * (_T - 1) / 2))
 
     _gap_rows_cl = []
-    for _L_cl in _lens_cl:
-        _seq_cl = _rep_cl[:_L_cl]
-        _mw_cl  = _mu_cl([BOS_ID] + _seq_cl, _L_cl)
-        _mn_cl  = _mu_cl(_seq_cl, _L_cl)
+    for _i_cl, _L_cl in enumerate(_lens_cl):
+        _mw_cl = _mu_rows(_H_cl[2 * _i_cl, 1:_L_cl + 1])      # with BOS, skip BOS row
+        _mn_cl = _mu_rows(_H_cl[2 * _i_cl + 1, :_L_cl])       # without BOS
         _gap_rows_cl.append({
             "Length": _L_cl,
             "With BOS": round(_mw_cl, 5),
             "Without BOS": round(_mn_cl, 5),
             "Gap": round(_mw_cl - _mn_cl, 5),
         })
+    _dt_cl = _t_cl.perf_counter() - _t0_cl
+    _ntok_cl = int(_mask_cl.sum().item())
 
     _df_cl   = pl.DataFrame(_gap_rows_cl)
     _long_cl = _df_cl.select(["Length", "With BOS", "Without BOS"]).unpivot(
@@ -1736,7 +2199,11 @@ def _(BOS_ID, alt, len_max_slider, mo, model, pl, text_input, tokenizer, torch):
         mo.md(f"Peak gap at length **{_peak_cl['Length']}**: μ_with={_peak_cl['With BOS']:.4f}, "
               f"μ_without={_peak_cl['Without BOS']:.4f}, gap={_peak_cl['Gap']:+.5f}. "
               f"{_trend_cl} — the mechanistic prediction of Theorem 3.2: the collapse problem "
-              "worsens with context, so the sink's value as a countermeasure grows with it."),
+              "worsens with context, so the sink's value as a countermeasure grows with it. "
+              f"*(All {len(_lens_cl) * 2} sequences — {_ntok_cl} tokens — in one batched pass "
+              f"through the transformer body, skipping the unused LM head: {_dt_cl:.2f}s"
+              + (f", peak VRAM {torch.cuda.max_memory_allocated()/1e9:.2f} GB"
+                 if model.device.type == "cuda" else "") + ".)*"),
     ], align="center")
     return
 
@@ -1782,38 +2249,49 @@ def _(mo):
 @app.cell
 def _(BOS_ID, alt, len_slider, mo, model, pl, tokenizer, torch):
     # μ_content over the SAME content tokens for every strategy (see the intro above).
-    # Auto-runs on load; re-runs when the length slider changes.
+    # All 5 strategies run as ONE padded batch through the transformer body (the LM head's
+    # logits are never used). Auto-runs on load; re-runs when the length slider changes.
     _N = len_slider.value
     _wds = ("the quick brown fox jumps over the lazy dog "
             "a cat sat on the mat light shines through dark clouds ").split()
     _content = tokenizer.encode(" ".join(_wds * 40), add_special_tokens=False)[:_N]
     _nC = len(_content)
 
-    def _mu_content(ids_list):
-        _ids = torch.tensor([ids_list], device=model.device)
-        with torch.no_grad():
-            _o = model(_ids, output_hidden_states=True)
-        _h = _o.hidden_states[-1][0]
-        _keep = torch.tensor([t != BOS_ID for t in ids_list], device=_h.device)
-        _hc = _h[_keep]                                    # content rows only
-        _T = _hc.shape[0]
-        if _T < 2:
-            return 0.0
-        _n = _hc / (_hc.norm(dim=-1, keepdim=True) + 1e-8)
-        _s = _n @ _n.T
-        return float(1 - _s.triu(diagonal=1).sum().item() / (_T * (_T - 1) / 2))
-
-    _mu_base = _mu_content([BOS_ID] + _content)            # single BOS at position 0
-    _res = [{"strategy": "baseline\n(1 sink)", "mu": _mu_base, "k_val": 9999, "n_sinks": 1}]
+    _strats = [("baseline\n(1 sink)", 9999, [BOS_ID] + _content)]
     for _kk in [8, 16, 32, 64]:
         _seq = [BOS_ID]
         for _i, _t in enumerate(_content):
             _seq.append(_t)
             if (_i + 1) % _kk == 0:
                 _seq.append(BOS_ID)
-        _seq = _seq[:1024]                                 # GPT-2 context cap
-        _res.append({"strategy": f"K={_kk}", "mu": _mu_content(_seq), "k_val": _kk,
+        _strats.append((f"K={_kk}", _kk, _seq[:1024]))     # GPT-2 context cap
+
+    _Tm_x = max(len(s) for _, _, s in _strats)
+    # Padding uses eos == BOS_ID in GPT-2, so the keep-mask below (token != BOS_ID,
+    # within real length) excludes pad rows and sink rows in one stroke.
+    _ids_x = torch.tensor([s + [BOS_ID] * (_Tm_x - len(s)) for _, _, s in _strats],
+                          device=model.device)
+    _mask_x = torch.tensor([[1] * len(s) + [0] * (_Tm_x - len(s)) for _, _, s in _strats],
+                           device=model.device)
+    with torch.no_grad():
+        _H_x = model.transformer(_ids_x, attention_mask=_mask_x).last_hidden_state
+
+    def _mu_of(h):
+        _T = h.shape[0]
+        if _T < 2:
+            return 0.0
+        _n = h / (h.norm(dim=-1, keepdim=True) + 1e-8)
+        _s = _n @ _n.T
+        return float(1 - _s.triu(diagonal=1).sum().item() / (_T * (_T - 1) / 2))
+
+    _res = []
+    for _bi, (_name, _kv, _seq) in enumerate(_strats):
+        _keep = torch.tensor(
+            [t != BOS_ID for t in _seq] + [False] * (_Tm_x - len(_seq)),
+            device=model.device)
+        _res.append({"strategy": _name, "mu": _mu_of(_H_x[_bi][_keep]), "k_val": _kv,
                      "n_sinks": sum(1 for t in _seq if t == BOS_ID)})
+    _mu_base = _res[0]["mu"]
 
     _df_e = pl.DataFrame(_res)
     # Honest comparison: best PERIODIC strategy vs the single-BOS baseline (never baseline
