@@ -1827,23 +1827,25 @@ def _(DIFF_BINS, DIFF_GROUP, alt, diff_len, diff_metric, diff_sink, get_census_e
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### The Modern-Model Test: Do Newer LLMs Sink Harder?
+    ### The Modern-Model Test: Are Sinks Universal in Modern LLMs?
 
-    Every live measurement so far used GPT-2, a 2019 model trained on a **1,024-token**
-    context. The paper's Prediction 1 (§4.1) says training context length drives sink
-    formation, but the paper tests it only on 120M-parameter models trained in-house.
+    Every live measurement so far used GPT-2, a 2019 model. Do attention sinks persist in the
+    LLMs people actually run in 2025? Two ungated families let us check at real scale:
+    **Qwen2.5** (2024) and **Qwen3** (2025), each from 0.5B to 14B.
 
-    Two ungated model families let us test it at real scale. **Qwen2.5** (2024) pre-trains
-    with long-context stages up to **32K tokens**, 32× GPT-2's window; **Qwen3** (2025)
-    extends that recipe. Both ship in sizes from 0.5B to 14B. If the paper is right, these
-    models should sink harder than GPT-2 at the same ε (Prediction 1), and harder as they
-    grow (Prediction 2).
+    One caution up front, because it shapes how to read the chart. It is tempting to treat this
+    as a test of the paper's Prediction 1 (longer training context drives stronger sinks): Qwen
+    pre-trains on windows up to **32K tokens**, 32× GPT-2's. But across off-the-shelf models,
+    training context is confounded with depth, width, attention design, tokenizer, and
+    pre-training data all at once, and you cannot move one while holding the rest fixed. The
+    paper isolates context precisely because it trains its own 120M models where *only* context
+    varies (Fig 5a above). So read this chart for what it can honestly show, whether sinks appear
+    everywhere and how the ε threshold behaves, not as a clean scaling law.
 
     Each run executes the **same 24-domain census** as above on the model you pick, so the
-    numbers are directly comparable, and adds a bar to the comparison chart below. One note
-    from §5: Qwen pins no ⟨BOS⟩ during training, so the paper predicts its sink forms on
-    **whatever token comes first**; we measure attention to position 0, exactly as the
-    paper's sink metric does.
+    numbers are directly comparable. One note from §5: Qwen pins no ⟨BOS⟩ during training, so its
+    sink forms on whatever token comes first; we measure attention to position 0, exactly as the
+    paper's sink metric does. That choice matters at high ε, as the chart shows.
 
     *VRAM guide (bf16): 0.5B ≈ 1 GB · 1.5B ≈ 3 GB · 3B ≈ 6 GB · 7B ≈ 15 GB · 14B ≈ 28 GB.
     One family stays loaded at a time; picking a model from the other family frees the
@@ -2013,12 +2015,17 @@ def _(alt, census_sink, get_census_eps, get_qwen_ladder, MODEL_ID, mo, pl):
         .configure(background="#07080f")
     )
     _note_l = (
-        "Amber bars are measured here (GPT-2 and the Qwen models you ran); purple bars are "
-        "the LLaMA 3.1 sink rates the paper reports in Table 1 at ε=0.8. Two predictions are "
-        "checkable at once: the Qwen bars should sit above GPT-2 at equal ε, since Qwen "
-        "trains on 32× longer context (Prediction 1), and bigger Qwen sizes should out-sink "
-        "smaller ones (Prediction 2). The live bars track the ε slider above; set it to 0.8 "
-        "to compare with the LLaMA numbers on equal terms."
+        "Amber bars are measured here (GPT-2 and the Qwen models you ran); purple bars are the "
+        "LLaMA 3.1 rates from the paper's Table 1, fixed at ε=0.8. The honest read is "
+        "universality, not a scaling law. Every model from 2019 to 2025 sinks on a large "
+        "majority of heads, and the 2025 Qwen3 family sinks hard across every size. But the rate "
+        "does not climb cleanly with size, depth, or training context: GPT-2 Large sinks less "
+        "than GPT-2 Medium, and Qwen3-8B less than Qwen3-4B, because these public models vary "
+        "every one of those axes at once (the paper isolates context only with its own "
+        "controlled 120M models, Fig 5a). What the ε slider does expose is sink hardness: at "
+        "ε=0.3 the no-⟨BOS⟩ models sink prolifically; at the strict 0.8 bar their softer "
+        "positional sinks thin out while the BOS-trained LLaMA models stay high. The purple "
+        "LLaMA bars are always ε=0.8, so compare like-for-like only with the slider at 0.8."
         if get_qwen_ladder() else
         "Amber is the current GPT-2 model, measured here; purple bars are the LLaMA 3.1 "
         "sink rates the paper reports in Table 1 at ε=0.8. Run a Qwen size above to add "
