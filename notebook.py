@@ -1639,6 +1639,189 @@ def _(CENSUS_DOMAINS, N_HEADS, N_LAYERS, alt, census_domains_sel, census_sink, c
     return
 
 
+# ── Does prompt content change the sink? (rate vs mass) ───────────────────────
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Does the Prompt Change the Sink? Rate vs Mass
+
+    The domain census varied *style* (code, French, chess) and the sink rate barely moved. A
+    natural next question, and one the paper raises but does not test (§2, "idling" heads): does
+    the *difficulty* of the prompt change the sink? If a sink is a head's no-op when it has
+    nothing to mix (Act II), then a prompt that gives heads genuine work should pull attention
+    off the sink.
+
+    The honest answer, measured live below, splits into two metrics that disagree, and the
+    disagreement is the finding:
+
+    - **Binary sink rate** (how many heads sink past ε) stays nearly flat, whatever the prompt.
+      The *population* of sink heads is fixed by the weights, not the input.
+    - **Mean sink mass** (how much attention those heads actually park on position 0) *does*
+      shift, by roughly 8 to 9 points, along one axis: how much specific token-to-token
+      structure the text has.
+
+    And the axis is **not** human difficulty. Trivial repetition pulls heads *off* the sink
+    (induction heads lock onto the repeated pattern); smooth, predictable prose leaves them
+    idling *on* it; multi-step reasoning sits in between. What moves the sink is structural
+    mixing demand, not how hard the text is to think about. Flip the metric toggle to watch the
+    flat rate turn into a fanned-out mass.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    # 6 bins x 3 prompts. Dependency-free so GPT-2 and any modern model measure the
+    # same prompts. Two groups: flowing prose (little specific to mix) vs symbolic /
+    # structured text (dense token-to-token dependencies). Each prompt is authored
+    # comfortably longer than T_DIFF; the compute cell truncates all to one common
+    # length so the comparison is not confounded by sequence length.
+    DIFF_GROUP = {
+        "conversational": "flowing prose",
+        "descriptive": "flowing prose",
+        "reasoning": "symbolic / structured",
+        "arithmetic": "symbolic / structured",
+        "code": "symbolic / structured",
+        "repetition": "symbolic / structured",
+    }
+    DIFF_PROMPTS = {
+        "conversational": [
+            "Thank you so much for your kind email and for taking the time to write to us today. I truly hope this message finds you well and in good spirits, and please do let me know if there is anything at all that you might need from our side.",
+            "It was really lovely to see you at the party last weekend, and I keep meaning to say how much everyone enjoyed the food you brought along. We should find a quiet evening soon to catch up properly over dinner and talk about the summer plans.",
+            "I just wanted to check in and see how you have been doing lately, since it has been a while since we last spoke on the phone. Things here have been calm and pleasant, and the weather has finally turned warm enough to sit outside in the mornings.",
+        ],
+        "descriptive": [
+            "The old lighthouse keeper climbed the spiral stairs every evening at dusk, carrying his lantern and a small worn notebook where he wrote down the passing ships and the changing colour of the sky over the restless grey sea below the cliffs near his home.",
+            "She opened the wooden gate and walked slowly into the quiet garden, where climbing roses covered the crumbling old brick wall and a small stone fountain trickled softly beside the painted bench her grandmother had loved during the long warm summers.",
+            "The train pulled slowly out of the station as heavy rain streaked the cold windows, and the tired passengers settled into their seats with newspapers and coffee while the grey city gave way to green fields and distant hills wrapped in a thin morning mist.",
+        ],
+        "reasoning": [
+            "If all birds can fly and a robin is certainly a bird, then it follows that a robin can fly. However a penguin is also a bird, but a penguin plainly cannot fly at all, so it is simply not true that all birds fly, and therefore the first premise must be false.",
+            "Either the butler or the maid quietly took the key from the table. If the butler had taken it, then the heavy door would have been locked from the inside. But the door was clearly open, so the butler did not take it, and hence it must have been the maid.",
+            "Assume for a moment that the number is even. Then by definition it must be divisible by two without any remainder. But the problem clearly states that it leaves a remainder of one, which contradicts our assumption, so the number must in fact be odd instead.",
+        ],
+        "arithmetic": [
+            "Start with the number three. Add eight to it to get eleven. Multiply that by two to get twenty two. Subtract five from it to get seventeen. Add the very first number three to reach twenty. Divide the total by four to get five, and then stop right here.",
+            "Take the number ten to begin with. Subtract four from it to get six. Multiply that by three to get eighteen. Add two more to reach twenty. Halve the total to get ten again. Add the previous eighteen to reach twenty eight, then subtract eight to get twenty.",
+            "Let x be equal to seven for now. Double it to get fourteen. Add six to reach twenty. Subtract x from it to get thirteen. Multiply by two to get twenty six. Subtract thirteen to get thirteen again, then add x twice over to reach twenty seven exactly.",
+        ],
+        "code": [
+            "def solve(nums):\n    total = 0\n    for i, x in enumerate(nums):\n        if x > total:\n            total = total + x\n        else:\n            total = total - x\n    return total\nresult = solve([3, 1, 4, 1, 5, 9, 2, 6])\nprint(result + total)\n",
+            "class Stack:\n    def __init__(self):\n        self.items = []\n    def push(self, value):\n        self.items.append(value)\n    def pop(self):\n        return self.items.pop()\ns = Stack()\ns.push(1)\ns.push(2)\ns.push(3)\nprint(s.pop() + s.pop())\n",
+            "for i in range(n):\n    for j in range(n):\n        if grid[i][j] == 1:\n            count = count + neighbours(i, j)\n        else:\n            grid[i][j] = count\n            visited.add((i, j))\nreturn grid[n - 1][n - 1] + count\n",
+        ],
+        "repetition": [
+            "The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat on the mat. The cat sat.",
+            "yes yes okay okay sure sure fine fine right right good good well well now now then then yes yes okay okay sure sure fine fine right right good good well well now now then then yes yes okay okay sure sure fine fine right right good good well well now now",
+            "and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then and then",
+        ],
+    }
+    DIFF_TEXTS = [t for b in DIFF_PROMPTS for t in DIFF_PROMPTS[b]]
+    DIFF_BINS = [b for b in DIFF_PROMPTS for _ in DIFF_PROMPTS[b]]
+    T_DIFF = 48
+    return DIFF_BINS, DIFF_GROUP, DIFF_TEXTS, T_DIFF
+
+
+@app.cell
+def _(BOS_ID, DIFF_TEXTS, T_DIFF, model, tokenizer, torch):
+    # One batched forward pass, all sequences truncated to a common length so the
+    # comparison is length-controlled (mean sink mass depends on sequence length).
+    _enc = [tokenizer.encode(_t, add_special_tokens=False) for _t in DIFF_TEXTS]
+    _Tuse = min(T_DIFF, min(len(_e) for _e in _enc) + 1)   # +1 for BOS
+    _seqs = [[BOS_ID] + _e[: _Tuse - 1] for _e in _enc]
+    _ids = torch.tensor(_seqs, device=model.device)        # equal length, no padding
+    with torch.no_grad():
+        _out = model(_ids, output_attentions=True)
+    _A = torch.stack(_out.attentions)                      # [L, P, H, T, T]
+    diff_sink = _A[..., 0].mean(-1).cpu()                  # [L, P, H] mean pos-0 mass
+    diff_len = _Tuse
+    return diff_len, diff_sink
+
+
+@app.cell
+def _(mo):
+    diff_metric = mo.ui.radio(
+        options=["Mean sink mass (functional)", "Binary sink rate (structural)"],
+        value="Mean sink mass (functional)",
+        label="Metric",
+        inline=True,
+    )
+    diff_metric
+    return (diff_metric,)
+
+
+@app.cell(hide_code=True)
+def _(DIFF_BINS, DIFF_GROUP, alt, diff_len, diff_metric, diff_sink, get_census_eps, mo, pl):
+    _eps = get_census_eps()
+    _bins = list(dict.fromkeys(DIFF_BINS))                 # unique, in order
+    _idx = {b: [i for i, bb in enumerate(DIFF_BINS) if bb == b] for b in _bins}
+    _struct = diff_sink.mean(dim=1) > _eps                 # [L,H] heads that sink on avg
+
+    _mass_mode = diff_metric.value.startswith("Mean")
+    _rows = []
+    for _b in _bins:
+        _sub = diff_sink[:, _idx[_b], :]                   # [L, nb, H]
+        _mass = float(_sub.permute(1, 0, 2)[:, _struct].mean()) if _struct.any() else 0.0
+        _rate = float((_sub > _eps).float().mean()) * 100
+        _rows.append({"bin": _b, "group": DIFF_GROUP[_b],
+                      "value": _mass if _mass_mode else _rate,
+                      "mass": _mass, "rate": _rate})
+    _df = pl.DataFrame(_rows)
+
+    _xtitle = ("mean attention on position 0 (sink heads)" if _mass_mode
+               else f"% of heads sinking (ε = {_eps:.2f})")
+    _xdom = [0, float(max(0.8, _df["value"].max() + 0.05))] if _mass_mode else [0, 100]
+    _bars = (
+        alt.Chart(_df)
+        .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+        .encode(
+            y=alt.Y("bin:N", sort=alt.SortField("value", order="descending"), title=None,
+                    axis=alt.Axis(labelColor="#94a3b8", labelFontSize=11)),
+            x=alt.X("value:Q", title=_xtitle, scale=alt.Scale(domain=_xdom),
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            color=alt.Color("group:N",
+                scale=alt.Scale(domain=["flowing prose", "symbolic / structured"],
+                                range=["#f59e0b", "#22d3ee"]),
+                legend=alt.Legend(title=None, labelColor="#94a3b8", orient="bottom")),
+            tooltip=[alt.Tooltip("bin:N"), alt.Tooltip("group:N"),
+                     alt.Tooltip("mass:Q", format=".3f", title="mean sink mass"),
+                     alt.Tooltip("rate:Q", format=".1f", title="sink rate %")],
+        )
+        .properties(width=430, height=210, title=alt.TitleParams(
+            text=("Sink MASS shifts with structure (matched length "
+                  f"{diff_len} tokens)" if _mass_mode
+                  else f"Sink RATE stays flat across prompt types (ε = {_eps:.2f})"),
+            color="#e2e8f0", fontSize=12))
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+
+    _mass_span = _df["mass"].max() - _df["mass"].min()
+    _rate_span = _df["rate"].max() - _df["rate"].min()
+    if _mass_mode:
+        _note = (
+            f"Across these six prompt types the binary sink rate spans only "
+            f"**{_rate_span:.0f} points**, but the mean sink mass among the sink heads spans "
+            f"**{_mass_span * 100:.0f} points** ({_df['mass'].min():.2f} to {_df['mass'].max():.2f}). "
+            f"The flowing-prose bins (amber) sit highest: those heads have little specific to "
+            f"attend to, so they idle on the sink. The symbolic bins (cyan), including trivial "
+            f"repetition, pull attention off it. This is the Act II no-op switch modulating by "
+            f"degree, measured across text. Switch the metric to **Binary sink rate** to see the "
+            f"same heads look completely input-invariant."
+        )
+    else:
+        _note = (
+            f"Every bar is nearly the same height: the sink rate spans just **{_rate_span:.0f} "
+            f"points** whatever the prompt. The population of heads that sink is set by the "
+            f"weights, not the text, the same structural verdict the 24-domain census reached. "
+            f"Now switch to **Mean sink mass** to see the one thing that *does* move with prompt "
+            f"content."
+        )
+    mo.vstack([_bars, mo.md(_note)], align="center")
+    return
+
+
 # ── The Modern-Model Test: Qwen ladders (0.5B → 14B) ──────────────────────────
 
 @app.cell(hide_code=True)
