@@ -351,8 +351,84 @@ def _(mo):
 
     The heatmap below shows where it goes for GPT-2 on your text. Each cell is one attention head (rows = layers, columns = heads). Color encodes how much of that head's average attention lands on position 0 (`<BOS>`). Amber is a strong sink. Dark is distributed attention.
 
+    Why position 0 in particular? Under a causal mask, each token attends only to itself and the tokens before it. Position 0 is the single token present in the visible history of *every* other position. It is the one address every head can reach no matter where it sits in the sequence, which makes it the natural place to park attention a head wants to discard. Later tokens cannot serve this role: a token halfway through the sequence is invisible to everything that came before it.
+
     The paper uses ε = 0.3 as the default sink threshold (§2). Adjust it below to explore.
     """)
+    return
+
+
+@app.cell
+def _(mo):
+    causal_q = mo.ui.slider(
+        0, 9, step=1, value=6,
+        label="Query position i (the token doing the attending)", show_value=True)
+    causal_q
+    return (causal_q,)
+
+
+@app.cell(hide_code=True)
+def _(alt, causal_q, mo, pl):
+    # Exact causal mask (lower-triangular): no model, no data, just the structural
+    # fact that answers "why the first token". Cell (query i, key j) is reachable
+    # iff j <= i. Key 0 is reachable from every row -> the universal sink address.
+    _T = 10
+    _i = causal_q.value
+    _rows = []
+    for _qi in range(_T):
+        for _kj in range(_T):
+            if _kj > _qi:
+                _state = "blocked (future)"
+            elif _kj == 0:
+                _state = "key 0 (always visible)"
+            else:
+                _state = "visible past"
+            _rows.append({"query": _qi, "key": _kj, "state": _state, "sel": _qi == _i})
+    _df = pl.DataFrame(_rows)
+
+    _grid = (
+        alt.Chart(_df)
+        .mark_rect(stroke="#07080f", strokeWidth=1)
+        .encode(
+            x=alt.X("key:O", title="Key position j (the token being attended to)",
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            y=alt.Y("query:O", title="Query position i",
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            color=alt.Color("state:N",
+                scale=alt.Scale(
+                    domain=["blocked (future)", "visible past", "key 0 (always visible)"],
+                    range=["#0d1220", "#334366", "#f59e0b"]),
+                legend=alt.Legend(title=None, labelColor="#94a3b8", orient="bottom")),
+            tooltip=[alt.Tooltip("query:O", title="query i"),
+                     alt.Tooltip("key:O", title="key j"),
+                     alt.Tooltip("state:N", title="")],
+        )
+        .properties(width=340, height=340,
+            title=alt.TitleParams(
+                text="Causal mask: who can attend to whom", color="#e2e8f0", fontSize=12))
+    )
+    _sel = (
+        alt.Chart(_df.filter(pl.col("sel")))
+        .mark_rect(fill=None, stroke="#e2e8f0", strokeWidth=2.5)
+        .encode(x="key:O", y="query:O")
+    )
+    _chart = ((_grid + _sel)
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f"))
+
+    mo.vstack([
+        mo.md("### Why the first token? Look at the causal mask"),
+        _chart,
+        mo.md(
+            f"The white-outlined row is query position **{_i}**. It can attend only to keys "
+            f"**0 … {_i}** ({_i + 1} of {_T}); everything to its right is a future token it "
+            f"cannot see. Slide *i* and the visible range grows or shrinks, but the amber column, "
+            f"**key 0**, never leaves it. Position 0 is the one token inside the visible history of "
+            f"*every* query, the single address every head can reach no matter where it sits. A token "
+            f"in the middle (say key 5) is invisible to every query below row 5, so it could never "
+            f"serve the whole sequence. That asymmetry is why a causal model parks its sink on the "
+            f"first token and nowhere else."),
+    ], align="center")
     return
 
 
@@ -2305,6 +2381,13 @@ def _(mo):
       can attend to it regardless of document boundaries
     - **No fixed BOS:** `<BOS>` appears only at document boundaries, not pinned
 
+    Packing also sets *where* sinks live. Under plain causal masking every token can see
+    position 0, so one global sink at the sequence start serves the entire context. Under
+    intra-doc masking a token cannot see earlier documents in the packed window, so no shared
+    position-0 sink is reachable. The model compensates by forming a fresh *local* sink at the
+    first token of each concatenated document. So the masking strategy decides not just whether
+    sinks form but how many and where they sit.
+
     The chart below shows what happens at inference when a model trained *with* fixed BOS
     has that BOS *removed*.
 
@@ -2367,7 +2450,7 @@ Three results stand out (paper §5 summary):
   Same pattern with intra-doc masking: 90.56% → 0.00%, loss 2.67 → 7.78.
 
 - **Without fixed BOS, the model finds a sink at whichever token is first.**
-  Causal masking without BOS: 65.10% sink rate, normal loss 2.69. Pre-training choices only affect which token the sink latches onto.
+  Causal masking without BOS: 65.10% sink rate, normal loss 2.69. Pre-training choices only affect which token the sink latches onto. This is not free. A sink must carry a near-zero value vector (Act II), so a model without a dedicated BOS is forced to turn an ordinary word like *The* or *Once* into the sink, suppressing that word's value norm and degrading its own meaning. Stability at position 0 is bought by sacrificing the first token's representation, which is exactly what a dedicated `<BOS>` exists to avoid.
 
 - **BOS present but not artificially pinned still matters, just less catastrophically.**
   Intra-doc masking with BOS at natural document boundaries: 83.33% sink rate with BOS at inference,
@@ -2452,6 +2535,8 @@ def _(alt, mo, pl):
         _ch4,
         mo.md(r"""
 RULER tests long-context reasoning at 4096 tokens. Without BOS, attention distributions smooth out (as shown in the mixing simulation above) and the model fails to maintain distinct representations. The score drops to 0.00%.
+
+The mechanism is specific, not a vague loss of stability. A head's default, when it has nothing worth mixing, is to dump its attention on position 0. Trained with a fixed BOS there, that default lands on a near-zero value vector and injects almost nothing. Remove BOS and position 0 is now an ordinary, high-norm word. The same default attention now pours *that one word's* representation into every downstream token, so every position drifts toward the same content and the sequence collapses into near-identical hidden states. The heads did not change their behavior; the target under them did. That is why the drop is catastrophic and immediate rather than gradual.
 
 Short-context benchmarks fall too (ARC-Easy: −52 percentage points). The sink provides structural stability at all scales, not only on long sequences.
         """),
@@ -2897,6 +2982,145 @@ def _(MODEL_CACHE, MODEL_ID, device, mo, torch):
             "---\n#### ⚙️ Under the hood\n\nRunning on **CPU**. The experiments are batched "
             "the same way as on GPU, just slower.")
     _card
+    return
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COULD WE DESIGN THE SINK AWAY?  (softmax normalization playground)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ---
+
+    ## Could We Design the Sink Away?
+
+    Everything so far treats the sink as inevitable. It is not. The sink exists because softmax
+    forces a head's attention weights to sum to exactly 1: a head with nothing worth mixing still
+    has to spend all of its mass on tokens, and (Act I) position 0 is the cheapest place to dump it.
+    So the sink is downstream of one specific modelling choice, the softmax normalization.
+
+    The paper makes this framing explicit. It cites *softmax is not enough (for sharp
+    out-of-distribution)* (Veličković et al., 2024) and relates the sink to gated,
+    mixture-of-depths style mechanisms, though it does not itself train a sink-free attention
+    variant. The playground below runs the one comparison that settles the argument: standard
+    softmax against **softmax-off-by-one** (a `+1` in the denominator, letting the weights sum to
+    *less* than 1, the same idea as adding a learnable no-op key with a zero value vector). Push a
+    head toward disengaging and watch which formulation can actually do it.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    sm_signal = mo.ui.slider(
+        0.0, 8.0, step=0.5, value=0.0,
+        label="Signal on the content token (how much real information there is to attend to)",
+        show_value=True)
+    sm_disengage = mo.ui.slider(
+        0.0, 8.0, step=0.5, value=3.0,
+        label="Head's disengage pressure (how hard it tries to attend to nothing)",
+        show_value=True)
+    mo.vstack([sm_signal, sm_disengage])
+    return sm_disengage, sm_signal
+
+
+@app.cell(hide_code=True)
+def _(alt, mo, np, pl, sm_disengage, sm_signal):
+    # Pure softmax math, exact. A head looks at K=6 past tokens. It slightly prefers one
+    # content token (position 3) by `signal`, and applies `disengage` pressure uniformly to
+    # every real-token logit. The null slot (off-sequence, off-by-one only) has a fixed logit 0.
+    def _softmax(x):
+        _x = np.asarray(x, dtype=float)
+        _e = np.exp(_x - _x.max())
+        return _e / _e.sum()
+
+    _K = 6
+    _s = sm_signal.value
+    _d = sm_disengage.value
+    _logits = np.zeros(_K)
+    _logits[3] += _s
+    _logits = _logits - _d                      # uniform disengage pressure
+
+    _w_std = _softmax(_logits)                   # weights over real tokens only, sum = 1
+    _w_o1 = _softmax(np.append(_logits, 0.0))    # append null slot (logit 0), sum = 1 over K+1
+
+    _slots = [f"t{_j}" for _j in range(_K)] + ["∅ off-seq"]
+    _kinds = ["token"] * _K + ["off-sequence"]
+    _long = pl.DataFrame({
+        "slot": _slots * 2,
+        "weight": list(_w_std) + [0.0] + list(_w_o1),
+        "formulation": ["Standard softmax"] * (_K + 1) + ["Off-by-one softmax"] * (_K + 1),
+        "kind": _kinds * 2,
+    })
+
+    _bars = (
+        alt.Chart(_long)
+        .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+        .encode(
+            x=alt.X("slot:N", sort=_slots, title=None,
+                    axis=alt.Axis(labelColor="#94a3b8", labelAngle=0, labelFontSize=10)),
+            y=alt.Y("weight:Q", title="attention weight", scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8")),
+            color=alt.Color("kind:N",
+                scale=alt.Scale(domain=["token", "off-sequence"], range=["#22d3ee", "#f59e0b"]),
+                legend=alt.Legend(title=None, labelColor="#94a3b8", orient="bottom")),
+            column=alt.Column("formulation:N", sort=["Standard softmax", "Off-by-one softmax"],
+                header=alt.Header(labelColor="#e2e8f0", titleColor="#e2e8f0", labelFontSize=12)),
+            tooltip=[alt.Tooltip("formulation:N"), alt.Tooltip("slot:N"),
+                     alt.Tooltip("weight:Q", format=".1%")],
+        )
+        .properties(width=215, height=230)
+        .configure_view(stroke="#1e2d47", fill="#0d1220")
+        .configure(background="#07080f")
+    )
+
+    _real_o1 = float(_w_o1[:_K].sum())
+    _null_o1 = float(_w_o1[_K])
+
+    _cs = "background:#0d1220;border:1px solid #1e2d47;border-radius:8px;padding:14px 18px;text-align:center;"
+    _cv = "font-size:1.7em;font-weight:700;line-height:1;margin-bottom:4px;"
+    _cl = "font-size:0.7em;color:#8896a8;text-transform:uppercase;letter-spacing:0.05em;"
+    _cg = "display:grid;grid-template-columns:repeat(2,1fr);gap:10px;width:100%;max-width:40rem;margin:0 auto 0.4em;"
+    _cards = mo.Html(f"""<div style="{_cg}">
+      <div style="{_cs}"><div style="{_cv}color:#22d3ee">100.0%</div>
+        <div style="{_cl}">Standard · mass on tokens</div>
+        <div style="font-size:0.65em;color:#94a3b8">off-sequence: 0% (not representable)</div></div>
+      <div style="{_cs}"><div style="{_cv}color:#f59e0b">{_null_o1 * 100:.1f}%</div>
+        <div style="{_cl}">Off-by-one · mass off-sequence</div>
+        <div style="font-size:0.65em;color:#94a3b8">on tokens: {_real_o1 * 100:.1f}%</div></div>
+    </div>""")
+
+    if _d >= 2.0 and _s < 1.0:
+        _note = (
+            f"The head is trying to disengage. **Standard softmax cannot let it.** Lowering every "
+            f"logit by the same amount leaves the distribution unchanged (softmax is shift-invariant), "
+            f"so 100% of attention still lands on tokens, spread flat. In a trained causal model the "
+            f"cheapest way to spend that forced mass is to dump it on one token, and Act I showed which "
+            f"one: position 0. **Off-by-one** breaks the shift-invariance with its `+1`, so the same "
+            f"pressure drains **{_null_o1 * 100:.0f}%** of the attention off-sequence. That off-sequence "
+            f"slot is exactly what a physical sink token stands in for when the formula has no room for it."
+        )
+    elif _s >= 3.0:
+        _note = (
+            f"Now the head has real work: content token **t3** carries a strong signal, so both "
+            f"formulations concentrate on it and the off-sequence slot stays nearly empty "
+            f"({_null_o1 * 100:.0f}%). When there is something worth mixing, the sink question is moot. "
+            f"The sink only matters when a head has *nothing* to do. Drop the signal to 0 to see it."
+        )
+    else:
+        _note = (
+            f"Standard softmax always commits 100% of its mass to tokens; off-by-one currently leaves "
+            f"**{_null_o1 * 100:.0f}%** off-sequence. Raise the disengage pressure with the signal at 0 "
+            f"to see the gap open: standard softmax stays pinned at 100% on tokens no matter how hard the "
+            f"head pushes, because shifting all logits equally does nothing to a softmax."
+        )
+
+    mo.vstack([_cards, _bars, mo.md(
+        _note + "\n\nThe first-token sink is not a law of attention. It is an artifact of the "
+        "normalization we picked. Change the normalization and the head gets an explicit off "
+        "switch, so it no longer has to hijack a real token to build one.")], align="center")
     return
 
 
